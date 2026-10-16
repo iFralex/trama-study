@@ -47,3 +47,6 @@ I tentativi automatici nel browser usano un archivio fittizio separato. Non veng
 ## Formule accessibili — 16 ottobre 2026
 
 12 test TypeScript/Pi e 6 percorsi browser passati. Descrizioni italiane reali verificate per `T(n)=an+b`, frazioni, quadrati e pedici, senza ripetizione dell'annotazione TeX. La formula è un singolo oggetto accessibile e il hit test sulla `n` restituisce il contenitore intero. Verificate persistenza, modalità testuale e ripristino del MathML. Il test non avvia la voce nativa macOS; resta necessaria la prova con la lettura sotto il puntatore dell'utente.
+
+
+La prova dell’utente su macOS ha mostrato che il ruolo matematico con sola etichetta non veniva letto sotto il puntatore. La modalità Formula intera ora usa un vero nodo di testo, sovrapposto con dimensioni corrispondenti alla formula; il disegno resta visibile e non viene duplicato nell’albero accessibile. Il test browser verifica StaticText, rettangolo e hit test. Il risultato della nuova versione con la voce nativa resta da confermare sul Mac dell’utente.

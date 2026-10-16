@@ -1,4 +1,4 @@
-import React,{createContext,useContext,useEffect,useState} from 'react';
+import React,{createContext,useContext,useEffect,useLayoutEffect,useRef,useState} from 'react';
 
 type Mode='whole'|'symbols'|'text';
 const modes=new Set(['whole','symbols','text']);
@@ -13,7 +13,7 @@ export function MathReadingProvider({children}:{children:React.ReactNode}){
 }
 export function MathReadingSettings(){
   const {mode,setMode}=useContext(Reading);
-  return <details className="accessibility-settings"><summary>Accessibilità</summary><div className="accessibility-popover"><label>Modalità di lettura delle formule<select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="whole">Formula intera</option><option value="symbols">Esplora i simboli</option><option value="text">Testo leggibile</option></select></label><p>“Formula intera” raggruppa i simboli per la lettura sotto il puntatore. “Testo leggibile” mostra la descrizione in parole. La preferenza viene ricordata.</p></div></details>;
+  return <details className="accessibility-settings"><summary>Accessibilità</summary><div className="accessibility-popover"><label>Modalità di lettura delle formule<select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="whole">Formula intera</option><option value="symbols">Esplora i simboli</option><option value="text">Testo leggibile</option></select></label><p>“Formula intera” espone un testo unico sotto il puntatore, mantenendo la formula visiva. “Testo leggibile” mostra la descrizione in parole. La preferenza viene ricordata.</p></div></details>;
 }
 export function formulaTex(node:any):string{
   if(node?.tagName==='annotation'&&node.properties?.encoding==='application/x-tex')return (node.children??[]).map((c:any)=>c.value??'').join('');
@@ -27,10 +27,20 @@ function describe(tex:string){
   return pending;
 }
 export function AccessibleMath({tex,children}:{tex:string,children:React.ReactNode}){
-  const {mode}=useContext(Reading);const [spoken,setSpoken]=useState<{tex:string,text:string}|null>(null);
+  const {mode}=useContext(Reading);const unit=useRef<HTMLSpanElement>(null),reading=useRef<HTMLSpanElement>(null);const [spoken,setSpoken]=useState<{tex:string,text:string}|null>(null);
   useEffect(()=>{let active=true;if(mode!=='symbols'&&tex)void describe(tex).then(text=>{if(active)setSpoken({tex,text});}).catch(()=>{});return()=>{active=false;};},[tex,mode]);
-  if(!tex)return <>{children}</>;
   const speech=spoken?.tex===tex?spoken.text:tex;
+  useLayoutEffect(()=>{
+    if(mode!=='whole'||!unit.current||!reading.current)return;
+    const box=unit.current,text=reading.current;
+    const fit=()=>{const width=text.offsetWidth,height=text.offsetHeight;if(width&&height)text.style.transform=`scale(${box.offsetWidth/width},${box.offsetHeight/height})`;};
+    fit();const observer=new ResizeObserver(fit);observer.observe(box);observer.observe(text);
+    return()=>observer.disconnect();
+  },[mode,speech]);
+  if(!tex)return <>{children}</>;
   if(mode==='text')return <span className="math-readable" lang="it">{speech}</span>;
-  return <span className="math-unit" role={mode==='whole'?'math':undefined} aria-label={mode==='whole'?speech:undefined} lang={mode==='whole'?'it':undefined}><span className="math-visual" aria-hidden={mode==='whole'?true:undefined}>{children}</span></span>;
+  if(mode==='symbols')return <>{children}</>;
+  // macOS pointer speech may skip ARIA math names. Give it an actual StaticText
+  // node over the same rectangle, rather than hiding every readable descendant.
+  return <span className="math-unit" ref={unit} lang="it"><span className="math-visual" aria-hidden="true">{children}</span><span className="math-spoken-hitbox" ref={reading}>{speech}</span></span>;
 }
