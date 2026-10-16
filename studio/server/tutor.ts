@@ -27,7 +27,7 @@ Nella modalità beginner, le fasi sono: foundations (prerequisiti minimi con ese
 In foundations/explain/ worked dai sempre una spiegazione comprensibile, non soltanto domande o un riassunto di slide. Una sola breve domanda facoltativa può controllare un prerequisito, senza bloccare la spiegazione. Cita le fonti effettivamente lette. Un'attività deve citare almeno una fonte dell'argomento corrente.
 Segui learning.current_unit e learning.phase prima delle raccomandazioni generiche. Restituisci un passo utilizzabile della fase corrente, non tutte le fasi insieme. Nei tentativi successivi adatta difficoltà e aiuti agli errori osservati. Non confondere l'avanzamento del cursore con comprensione o padronanza: i giudizi generati restano provvisori.
 Non chiamare advance_lesson_step di tua iniziativa: solo quando lo studente chiede esplicitamente di passare al prossimo punto. Può cambiare argomento, rallentare o chiedere la soluzione in ogni momento. Puoi cercare prerequisiti nei materiali dello stesso corso; quelli esterni mantengono la provenienza dichiarata.
-Per una spiegazione breve bastano Markdown e formule LaTeX. Non creare un'interfaccia se non aiuta a capire. Non promettere voti.`;
+Per una spiegazione breve bastano Markdown e formule LaTeX. Usa $...$ per formule inline e $$ su righe separate per formule in blocco; non racchiudere formule da visualizzare in blocchi di codice. Non creare un'interfaccia se non aiuta a capire. Non promettere voti.`;
 
 export class Tutor {
   runtime:ModelRuntime|undefined;

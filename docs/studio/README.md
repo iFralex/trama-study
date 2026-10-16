@@ -77,3 +77,7 @@ Il pulsante **Tema scuro / Tema chiaro** in alto a destra cambia il tema senza i
 ## Partire dalle basi
 
 **Parti dalle basi** avvia un percorso ordinato sulle lezioni del corso, con prerequisiti, spiegazioni, esempi svolti e prove guidate/autonome. Argomenti e attività sono ancorati alle fonti; lezione, argomento e fase rimangono salvati. [Guida e limiti del percorso](DALLE_BASI.md).
+
+## Formule matematiche
+
+Chat e attività testuali renderizzano LaTeX con KaTeX: `$...$` e `\(...\)` inline, `$$...$$` e `\[...\]` in blocco. La normalizzazione avviene solo nella visualizzazione: messaggi salvati, codice e destinazioni dei collegamenti rimangono invariati.
