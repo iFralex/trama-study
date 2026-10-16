@@ -141,3 +141,34 @@ test('math is one accessible object under the pointer, with persistent text and 
   await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();await expect(page.locator('.math-readable').filter({hasText:/T di n/})).toBeVisible();
   await page.getByText('Accessibilità',{exact:true}).click();await mode.selectOption('symbols');await expect(page.locator('.math-unit[role="math"]')).toHaveCount(0);await expect(page.locator('.katex-html').first()).toBeVisible();
 });
+
+
+test('short conversations keep the composer at the bottom and long ones keep it reachable',async({page})=>{
+  await page.setViewportSize({width:1280,height:1000});
+  await page.route('**/api/sessions',async route=>{
+    const response=await route.fetch(),view=await response.json();
+    view.activities=[];view.messages=[{id:'short-layout',role:'assistant',text:'Da quale concetto vuoi iniziare?',created:'2099-01-01T00:00:00Z'}];
+    await route.fulfill({json:view});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:'Inizia una nuova sessione',exact:true}).click();
+  const composer=page.locator('.composer'),input=page.getByLabel('Messaggio al tutor');
+  await expect(composer).toBeVisible();
+  const box=await composer.boundingBox();
+  expect(box!.y+box!.height).toBeGreaterThan(900);
+  expect(box!.y+box!.height).toBeLessThanOrEqual(1000);
+  await input.fill('La mia bozza');
+  await input.focus();
+  // Exercise content growth while preserving focus and the student's draft.
+  await page.locator('.messages').evaluate(el=>{
+    const paragraph=document.createElement('p');paragraph.textContent='Una spiegazione lunga. '.repeat(2000);el.appendChild(paragraph);
+  });
+  await expect(input).toBeFocused();await expect(input).toHaveValue('La mia bozza');
+  await expect(composer).toBeInViewport();
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  await expect(composer).toBeInViewport();
+  await page.setViewportSize({width:700,height:900});
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  await expect(input).toBeInViewport();
+  await expect(input).toHaveValue('La mia bozza');
+});

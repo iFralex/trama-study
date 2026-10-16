@@ -53,3 +53,6 @@ La prova dell’utente su macOS ha mostrato che il ruolo matematico con sola eti
 
 
 Lettura naturale: 13 test TypeScript/Pi e 6 percorsi browser passati; build completata. `T(n)=an+b` produce «T di n uguale a a per n più b». Verificati anche funzione con argomento composto, prodotto implicito con parentesi, frazioni, potenze e pedici. La nuova formulazione vocale è verificata nel testo accessibile; la pronuncia effettiva dipende dalla voce macOS.
+
+
+Posizione del campo messaggi: build e 7 percorsi browser passati. Una chat breve occupa almeno l’altezza disponibile e mantiene il campo in basso; con messaggi lunghi il campo resta raggiungibile durante lo scorrimento. Verificati bozza e focus conservati durante la crescita del contenuto e campo accessibile anche su schermo stretto.
