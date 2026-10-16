@@ -69,3 +69,7 @@ Politica concordata: prima confrontare le fonti del corso; usare conoscenza inte
 La ricerca web pubblica usa DuckDuckGo con fallback Bing RSS, senza chiavi aggiuntive; può essere limitata dai siti. `read_web_page` legge HTML o PDF, salva URL, momento e testo in `.state/studio/web`, e conserva le verifiche TLS. Limiti: HTTPS pubblico, 3 MB per risposta, 24.000 caratteri, fino a 12 pagine PDF per lettura (parametro `page` per proseguire). Le query devono contenere termini tecnici generici, senza informazioni personali o trascrizioni. In caso di indisponibilità il tutor deve dichiararla. I file originali non vengono corretti né riscritti.
 
 Per ripetere la verifica semantica e ibrida sul corso reale, usa `npm run verify:embeddings` con le stesse variabili della verifica delle fonti. Il rapporto viene scritto in `.state/studio/hybrid-verification.json`.
+
+## Tema chiaro e scuro
+
+Il pulsante **Tema scuro / Tema chiaro** in alto a destra cambia il tema senza interrompere le attività. La preferenza viene ricordata nel browser; al primo accesso si segue il tema del sistema. Chat, formule, pannelli e attività HTML condividono il tema. I PDF conservano i colori originali.
