@@ -5,7 +5,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import Markdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import {normalizeMath} from '../src/math';
+import {normalizeMath,inlineComparisonTex} from '../src/math';
 const render=(text:string)=>renderToStaticMarkup(createElement(Markdown,{remarkPlugins:[remarkMath],rehypePlugins:[rehypeKatex],children:normalizeMath(text)}));
 
 test('the reported lecture formula and inline LaTeX render as KaTeX',()=>{
@@ -24,4 +24,10 @@ test('math normalization preserves code, existing math and citation destinations
  const examples=['`\(x\)`', '    '+String.raw`\[x\]`, String.raw`$\text{\[x\]}$`,String.raw`[Fonte](https://example.org/a\(b\))`,String.raw`\\[x\\]`];
  for(const example of examples)assert.equal(normalizeMath(example),example);
  assert.equal(normalizeMath(String.raw`\[x+1`),String.raw`\[x+1`);
+});
+
+test('standalone code comparisons get speech without interpreting programs as formulas',()=>{
+ for(const text of ['i ≤ n','1 ≤ i ≤ n','i ≥ n','i ≠ n','i < n'])assert.equal(inlineComparisonTex(text),text);
+ assert.equal(inlineComparisonTex('i <= n'),'i ≤ n');
+ for(const text of ['i = 1','s = 0','for (i = 1; i <= n; i++)','i ≤ n\n','A[i]','if (i <= n) return;'])assert.equal(inlineComparisonTex(text),'');
 });

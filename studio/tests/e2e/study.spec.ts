@@ -124,11 +124,14 @@ test('beginner mode starts from course sources and resumes its lesson phase afte
 test('math is one accessible object under the pointer, with persistent text and symbol alternatives',async({page})=>{
   await page.route('**/api/sessions',async route=>{
     const response=await route.fetch(),view=await response.json();
-    view.messages.push({id:'accessible-formula',role:'assistant',text:'Il costo è $T(n)=an+b$.',created:'2099-01-01T00:00:00Z'});
+    view.messages.push({id:'accessible-formula',role:'assistant',text:'Il costo è $T(n)=an+b$. Verifica `i ≤ n`.\n\n```text\ni ≤ n\n```',created:'2099-01-01T00:00:00Z'});
     await route.fulfill({json:view});
   });
   await page.goto('/');await page.getByRole('button',{name:'Inizia una nuova sessione',exact:true}).click();
   const spoken=page.locator('.math-spoken-hitbox').filter({hasText:/T di n uguale a a per n più b/});
+  const comparison=page.locator('.math-spoken-hitbox').filter({hasText:'i minore o uguale a n'});
+  await expect(comparison).toHaveCount(1);await expect(comparison.locator('..').locator('code')).toHaveText('i ≤ n');
+  await expect(page.locator('pre code')).toHaveText('i ≤ n\n');
   const formula=spoken.locator('..');
   await expect(formula).toBeVisible();await expect(formula.locator('.katex-html')).toBeVisible();
   const tree=await formula.ariaSnapshot();expect(tree.trim().split('\n').length).toBe(1);expect(tree).toContain('text:');

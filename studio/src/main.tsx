@@ -8,14 +8,14 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import {artifactDocument,validArtifactEvent} from './artifact';
 import './style.css';
-import {normalizeMath} from './math';
+import {normalizeMath,inlineComparisonTex} from './math';
 import {AccessibleMath,formulaTex,MathReadingProvider,MathReadingSettings} from './math-accessibility';
 
 type Activity={id:string,version:number,spec:any,state:Record<string,any>,created?:string};
 type View={learning?:any,session:any,activities:Activity[],messages:any[],attempts:any[],progress:any[],recommendation?:any};
 async function api(url:string,body?:any){const response=await fetch('/api'+url,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw Error(data.error??'Operazione non riuscita.');return data;}
 const Sources=createContext<(id:string)=>void>(()=>{});
-function Prose({text}:{text:string}){const open=useContext(Sources);return <Markdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[rehypeKatex]} urlTransform={url=>/^(source:|https?:|#)/.test(url)?url:''} components={{span:({node,className,children,...props})=>className?.split(' ').includes('katex')?<AccessibleMath tex={formulaTex(node)}><span className={className} {...props}>{children}</span></AccessibleMath>:<span className={className} {...props}>{children}</span>,a:({href,children})=>href?.startsWith('source:')?<button className="source-link" onClick={()=>open(href.slice(7))}>{children}</button>:<a href={href} target="_blank" rel="noreferrer">{children}</a>}}>{normalizeMath(text)}</Markdown>;}
+function Prose({text}:{text:string}){const open=useContext(Sources);return <Markdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[rehypeKatex]} urlTransform={url=>/^(source:|https?:|#)/.test(url)?url:''} components={{code:({node,children,className,...props})=>{const tex=!className&&typeof children==='string'?inlineComparisonTex(children):'';const code=<code className={className} {...props}>{children}</code>;return tex?<AccessibleMath tex={tex}>{code}</AccessibleMath>:code;},span:({node,className,children,...props})=>className?.split(' ').includes('katex')?<AccessibleMath tex={formulaTex(node)}><span className={className} {...props}>{children}</span></AccessibleMath>:<span className={className} {...props}>{children}</span>,a:({href,children})=>href?.startsWith('source:')?<button className="source-link" onClick={()=>open(href.slice(7))}>{children}</button>:<a href={href} target="_blank" rel="noreferrer">{children}</a>}}>{normalizeMath(text)}</Markdown>;}
 const ActivityRendering=createContext<(id:string,version:number)=>React.ReactNode>(()=>null);
 function StudyTool({args}:any){const render=useContext(ActivityRendering);return render(args.id,args.version);}
 const Text=({text}:TextMessagePartProps)=><Prose text={text}/>;

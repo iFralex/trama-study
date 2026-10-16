@@ -37,3 +37,12 @@ export function normalizeMath(text:string):string{
   }
   return out;
 }
+
+/** Only standalone, short comparisons: never reinterpret a program or assignment. */
+export function inlineComparisonTex(text:string):string{
+  if(/[\r\n]/.test(text))return '';
+  const atom='(?:[a-zA-Z](?:_[a-zA-Z0-9])?|[0-9]+(?:[.][0-9]+)?)';
+  const comparison=new RegExp('^\\s*'+atom+'(?:\\s*(?:≤|≥|≠|<|>|<=|>=|!=)\\s*'+atom+')+\\s*$');
+  if(!comparison.test(text))return '';
+  return text.trim().replace(/<=|>=|!=/g,operator=>({'<=':'≤','>=':'≥','!=':'≠'})[operator]!);
+}

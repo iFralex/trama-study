@@ -56,3 +56,6 @@ Lettura naturale: 13 test TypeScript/Pi e 6 percorsi browser passati; build comp
 
 
 Posizione del campo messaggi: build e 7 percorsi browser passati. Una chat breve occupa almeno l’altezza disponibile e mantiene il campo in basso; con messaggi lunghi il campo resta raggiungibile durante lo scorrimento. Verificati bozza e focus conservati durante la crescita del contenuto e campo accessibile anche su schermo stretto.
+
+
+Confronti inline: il caso reale `i ≤ n` era codice inline in una tabella Markdown, fuori dal rendering matematico. Ora i brevi confronti isolati in codice inline espongono la descrizione completa, mantenendo il testo visibile; blocchi di codice e programmi restano esclusi. Verificati ≤, ≥, ≠ e forme ASCII, con 15 test TypeScript/Pi, 7 percorsi browser e build passati.

@@ -19,3 +19,10 @@ test('natural speech distinguishes the cost function and implicit products',asyn
  assert.equal((await mathSpeech('T+an')).speech,'T più a per n');
  assert.equal((await mathSpeech(String.raw`a\times n`)).speech,'a per n');
 });
+
+test('inequality operators are spoken rather than skipped',async()=>{
+ assert.equal((await mathSpeech('i ≤ n')).speech,'i minore o uguale a n');
+ assert.equal((await mathSpeech(String.raw`i\le n`)).speech,'i minore o uguale a n');
+ assert.equal((await mathSpeech('i ≥ n')).speech,'i maggiore o uguale a n');
+ assert.equal((await mathSpeech('i ≠ n')).speech,'i diverso da n');
+});
