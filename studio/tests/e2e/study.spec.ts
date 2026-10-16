@@ -175,3 +175,32 @@ test('short conversations keep the composer at the bottom and long ones keep it 
   await expect(input).toBeInViewport();
   await expect(input).toHaveValue('La mia bozza');
 });
+
+
+test('activity prompts preserve existing pseudocode lines and render fenced code',async({page})=>{
+  const code='m = A[0]\nper i = 1, …, n−1:\n    se A[i] > m:\n        m = A[i]\nrestituisci m';
+  await page.route('**/api/sessions',async route=>{
+    const response=await route.fetch(),view=await response.json();
+    const activity=view.activities.find((a:any)=>a.id===view.session.current);
+    activity.spec={...activity.spec,kind:'open',title:'RAM: breve prova autonoma',prompt:'Esempio didattico.\n\n'+code+'\n\nVersione in blocco di codice:\n\n```text\n'+code+'\n```\n\nMotiva la risposta.'};
+    await route.fulfill({json:view});
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Inizia una nuova sessione',exact:true}).click();
+  const prompt=page.locator('.activity-prompt');
+  const paragraph=prompt.locator('p').filter({hasText:'restituisci m'});
+  await expect(paragraph).toHaveCSS('white-space','pre-wrap');
+  expect(await paragraph.textContent()).toBe(code);
+  const linePositions=await paragraph.evaluate(el=>{
+    const text=el.firstChild!,content=text.textContent!;
+    return [content.indexOf('m = A[0]'),content.indexOf('per i'),content.indexOf('se A[i]')].map(start=>{
+      const range=document.createRange();range.setStart(text,start);range.setEnd(text,start+1);
+      const rect=range.getBoundingClientRect();return {x:rect.x,y:rect.y};
+    });
+  });
+  expect(linePositions[1].y).toBeGreaterThan(linePositions[0].y);
+  expect(linePositions[2].y).toBeGreaterThan(linePositions[1].y);
+  expect(linePositions[2].x).toBeGreaterThan(linePositions[1].x);
+  await expect(prompt.locator('pre code')).toHaveText(code+'\n');
+  await expect(prompt.locator('pre')).toHaveCSS('white-space','pre');
+  await expect(page.getByLabel('La tua risposta',{exact:true})).toBeEditable();
+});

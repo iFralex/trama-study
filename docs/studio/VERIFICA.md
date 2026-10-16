@@ -59,3 +59,6 @@ Posizione del campo messaggi: build e 7 percorsi browser passati. Una chat breve
 
 
 Confronti inline: il caso reale `i ≤ n` era codice inline in una tabella Markdown, fuori dal rendering matematico. Ora i brevi confronti isolati in codice inline espongono la descrizione completa, mantenendo il testo visibile; blocchi di codice e programmi restano esclusi. Verificati ≤, ≥, ≠ e forme ASCII, con 15 test TypeScript/Pi, 7 percorsi browser e build passati.
+
+
+Pseudocodice nelle domande: verificato l’esempio RAM originale, con righe e rientri conservati anche quando manca il blocco Markdown. Il renderer ripristina gli spazi rimossi dalla conversione Markdown e i paragrafi delle attività li visualizzano. I blocchi di codice mantengono la resa standard. Il tutor e lo schema dello strumento richiedono blocchi Markdown per codice/pseudocodice futuri. Build, 15 test TypeScript/Pi e 8 percorsi browser passati, incluso confronto delle coordinate effettive delle righe e dei rientri. Nessuna modifica ai contenuti o tentativi personali.
