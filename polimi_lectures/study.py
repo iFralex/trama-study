@@ -104,13 +104,22 @@ class Study:
         return self.root / 'corsi' / course
 
     def setting(self, name, value=None):
-        if name not in ('model', 'last_course'):
+        if name not in ('model', 'last_course', 'installation_id'):
             raise ValueError('Impostazione non valida.')
         if value is not None:
             self.db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)', (name, encoded(value)))
             self.db.commit()
         row = self.db.execute('SELECT value FROM settings WHERE key=?', (name,)).fetchone()
         return json.loads(row[0]) if row else None
+
+    def installation_id(self):
+        value=self.setting('installation_id')
+        try:
+            if str(uuid.UUID(str(value)))==str(value).lower():return value
+        except (ValueError,AttributeError,TypeError):pass
+        value=str(uuid.uuid4())
+        self.setting('installation_id',value)
+        return value
 
     def bootstrap(self):
         courses = self.courses()
@@ -734,7 +743,7 @@ class Study:
         return [dict(self.source(source),semantic_score=score) for source,score in sorted(best.items(),key=lambda x:x[1],reverse=True)[:max(1,min(int(limit),30))]]
 
     def dispatch(self,method,args):
-        allowed={'resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
+        allowed={'installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
         if method not in allowed:
             raise ValueError('Metodo non disponibile.')
         return getattr(self,method)(**args)

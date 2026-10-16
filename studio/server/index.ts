@@ -7,6 +7,7 @@ import {fsrs,createEmptyCard,Rating} from 'ts-fsrs';
 import {Bridge} from './bridge';
 import {Tutor} from './tutor';
 import {Embeddings} from './embeddings';
+import {installationLoginOptions} from './login';
 
 const directory=path.dirname(fileURLToPath(import.meta.url));
 const project=process.env.STUDIO_PROJECT??path.resolve(directory,'../..');
@@ -78,10 +79,11 @@ const logins=new Map<string,{events:any[],prompt:any,resolve?:(value:string)=>vo
 app.post('/api/login',run(async(req,res)=>{
   await tutor.models();const {provider,type}=req.body;
   if(!['oauth','api_key'].includes(type))throw Error('Tipo accesso non valido.');
+  const options=await installationLoginOptions(bridge);
   const id=randomUUID(),login={events:[] as any[],prompt:null as any,status:'pending',abort:new AbortController()} as any;
   logins.set(id,login);
   const timer=setTimeout(()=>{login.abort.abort();login.resolve?.('');logins.delete(id);},300000);
-  void tutor.runtime!.login(provider,type,{signal:login.abort.signal,notify(event){login.events.push(event);},prompt(prompt){login.prompt=prompt;return new Promise<string>(resolve=>{login.resolve=(value:string)=>{login.prompt=null;resolve(value);};});}}).then(()=>{login.status='done';}).catch(error=>{login.status='error';login.error=String(error.message).slice(0,300);}).finally(()=>clearTimeout(timer));
+  void tutor.runtime!.login(provider,type,{signal:login.abort.signal,notify(event){login.events.push(event);},prompt(prompt){login.prompt=prompt;return new Promise<string>(resolve=>{login.resolve=(value:string)=>{login.prompt=null;resolve(value);};});}},options).then(()=>{login.status='done';}).catch(error=>{login.status='error';login.error=String(error.message).slice(0,300);}).finally(()=>clearTimeout(timer));
   res.json({id});
 }));
 app.get('/api/login/:id',run(async(req,res)=>{const login=logins.get(req.params.id);if(!login)throw Error('Accesso scaduto.');res.json({events:login.events,prompt:login.prompt,status:login.status,error:login.error});if(login.status!=='pending')logins.delete(req.params.id);}));

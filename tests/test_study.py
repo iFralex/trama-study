@@ -151,6 +151,15 @@ class StudyTest(unittest.TestCase):
         self.store.event(self.sid,a['id'],1,'delayed','submit',{'answer':'CRCW'})
         self.assertEqual(self.store.progress(self.course)[0]['status'],'riconfermato a distanza')
 
+    def test_installation_id_is_valid_and_survives_restart(self):
+        import uuid
+        identity=self.store.installation_id()
+        self.assertEqual(str(uuid.UUID(identity)),identity)
+        other=Study(self.root)
+        self.assertEqual(other.dispatch('installation_id',{}),identity)
+        self.assertNotIn(identity,json.dumps(other.bootstrap()))
+        other.db.close()
+
     def test_file_navigation_matches_citations_and_lines(self):
         docs=self.store.list_materials(self.sid,'lecture.pdf')
         self.assertEqual(len(docs),1)
