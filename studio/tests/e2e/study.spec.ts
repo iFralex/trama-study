@@ -128,7 +128,7 @@ test('math is one accessible object under the pointer, with persistent text and 
     await route.fulfill({json:view});
   });
   await page.goto('/');await page.getByRole('button',{name:'Inizia una nuova sessione',exact:true}).click();
-  const spoken=page.locator('.math-spoken-hitbox').filter({hasText:/T maiuscola.*uguale a a n più b/});
+  const spoken=page.locator('.math-spoken-hitbox').filter({hasText:/T di n uguale a a per n più b/});
   const formula=spoken.locator('..');
   await expect(formula).toBeVisible();await expect(formula.locator('.katex-html')).toBeVisible();
   const tree=await formula.ariaSnapshot();expect(tree.trim().split('\n').length).toBe(1);expect(tree).toContain('text:');
@@ -137,7 +137,7 @@ test('math is one accessible object under the pointer, with persistent text and 
   const glyph=formula.locator('.katex-html .mord').filter({hasText:/^n$/}).first();const box=await glyph.boundingBox();expect(box).not.toBeNull();
   const target=await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.classList.contains('math-spoken-hitbox'),{x:box!.x+box!.width/2,y:box!.y+box!.height/2});expect(target).toBe(true);
   await page.getByText('Accessibilità',{exact:true}).click();const mode=page.getByLabel('Modalità di lettura delle formule');
-  await mode.selectOption('text');await expect(page.locator('.math-readable').filter({hasText:/T maiuscola/})).toBeVisible();await expect(spoken).toHaveCount(0);
-  await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();await expect(page.locator('.math-readable').filter({hasText:/T maiuscola/})).toBeVisible();
+  await mode.selectOption('text');await expect(page.locator('.math-readable').filter({hasText:/T di n/})).toBeVisible();await expect(spoken).toHaveCount(0);
+  await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();await expect(page.locator('.math-readable').filter({hasText:/T di n/})).toBeVisible();
   await page.getByText('Accessibilità',{exact:true}).click();await mode.selectOption('symbols');await expect(page.locator('.math-unit[role="math"]')).toHaveCount(0);await expect(page.locator('.katex-html').first()).toBeVisible();
 });
