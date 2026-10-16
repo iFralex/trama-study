@@ -4,7 +4,11 @@ Apri `Studio.command`, oppure `Avvia.command` → operazione 5. Il browser si ap
 
 Scegli il corso e premi **Riprendi il percorso**. Una sessione precedente conserva attività, versione, bozze, interazioni e tentativi. **Nuova sessione** conserva lo storico. Obiettivo e tempo si modificano nella sessione. **Modello e accesso** elenca i modelli autenticati e offre i flussi API/OAuth dei provider Pi. Il programma non presuppone che un abbonamento dia accesso a ogni modello. Le fonti recuperate e le risposte necessarie vengono inviate al provider scelto; i file originali restano sul disco.
 
-## Prima versione
+## Corso personale
+
+**Corso personale** prepara un piano completo dall’obiettivo d’esame scritto da te, sviluppa i capitoli progressivamente e affianca capitolo e chat. Include copertura delle fonti, profilo dei quesiti, diario correggibile, revisioni annullabili, simulazioni riservate e richiami FSRS. [Uso, architettura e limiti](CORSO_PERSONALE.md). Le funzioni descritte sotto restano disponibili per le sessioni precedenti.
+
+## Funzioni di base
 
 - Chat Markdown/LaTeX con attività incorporate e pannello espandibile.
 - Importazione incrementale, basata su SHA-256, di PDF, notebook, trascrizioni e allineamenti. Nessuna esecuzione dei notebook.

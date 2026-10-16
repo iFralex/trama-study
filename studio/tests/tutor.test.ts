@@ -33,7 +33,7 @@ test('actual Pi SDK streams, calls study tools, sees interactions and assesses s
     if(method==='setting')return null;
     if(method==='read_session')return {session:{id:'previous'},messages:[{role:'user',text:'Rivedere le letture concorrenti'}]};
     if(method==='grep_materials')return [{source:'source1',line:2,text:'int i = threadIdx.x;'}];
-    if(method==='context')return context;
+    if(method==='context'||method==='view')return context;
     if(method==='message'){messages.push(args);return 'm';}
     if(method==='search')return [{id:'source1',course:'course',text:'CREW concurrent reads, exclusive writes.',quality:'originale'}];
     if(method==='source')return {id:'source1',course:'course',text:'CREW concurrent reads, exclusive writes.'};

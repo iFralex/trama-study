@@ -1,0 +1,5 @@
+[
+  {"id":"pram-definition","title":"PC-1st-part-25-06-19.pdf","page":1,"start":"What is the difference between EREW","end":"B.","formats":["open"],"in_scope":true,"skill_terms":["pram","erew","crew","crcw"]},
+  {"id":"simd-pseudocode","title":"PC-1st-part-25-06-19.pdf","page":2,"start":"Write a short pseudocode","end":null,"formats":["code","mixed"],"in_scope":true,"skill_terms":["simd","diverg","divergenza"]},
+  {"id":"second-part-pack","title":"PC-2nd-part-25-06-19.pdf","page":1,"start":"Please describe how the Pack","end":"B.","formats":["mixed","code","open"],"in_scope":false,"skill_terms":["pack","pattern","compatt"]}
+]

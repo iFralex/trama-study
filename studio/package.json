@@ -9,7 +9,8 @@
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "verify:sources": "tsx server/verify-sources.ts",
-    "verify:embeddings": "tsx server/verify-embeddings.ts"
+    "verify:embeddings": "tsx server/verify-embeddings.ts",
+    "verify:curriculum": "tsx server/verify-curriculum.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.29",

@@ -62,3 +62,14 @@ Confronti inline: il caso reale `i ≤ n` era codice inline in una tabella Markd
 
 
 Pseudocodice nelle domande: verificato l’esempio RAM originale, con righe e rientri conservati anche quando manca il blocco Markdown. Il renderer ripristina gli spazi rimossi dalla conversione Markdown e i paragrafi delle attività li visualizzano. I blocchi di codice mantengono la resa standard. Il tutor e lo schema dello strumento richiedono blocchi Markdown per codice/pseudocodice futuri. Build, 15 test TypeScript/Pi e 8 percorsi browser passati, incluso confronto delle coordinate effettive delle righe e dei rientri. Nessuna modifica ai contenuti o tentativi personali.
+
+
+## Corso personale — 17 ottobre 2026
+
+- 44 test Python dello studio passati: perimetro confermato, lettura riprendibile, checkpoint idempotenti, copertura, esclusione dei temi riservati, profilo entro perimetro, fonti cambiate, versioni, bozze compatibili, sessioni multiple, diario ed evidenze, preferenze e richiami. Gli indicatori distinguono aiuti/autonomia/conferma differita e mantengono il qualificatore provvisorio; il criterio temporale è verificato con date simulate.
+- 16 test TypeScript/Pi passati. Il nuovo percorso usa davvero SDK Pi e bridge Python con provider HTTP simulato: scheda dell’esame, errore nel secondo blocco, ripresa senza rianalizzare il primo, ricerca, piano, capitolo, nuovo richiamo, valutatore isolato e scheda FSRS. I payload del provider non contengono i testi dei temi o delle soluzioni riservati.
+- 12 percorsi Playwright passati su un archivio sintetico separato: capitolo/chat affiancati, mobile, fonti/PDF, tastiera, focus e bozze, ripresa, diario correggibile, provider assente, oltre alle funzioni precedenti. Verificata anche la bozza della domanda successiva mentre è ancora in coda il salvataggio di un’attività.
+- Build TypeScript/Vite completata. Interfaccia desktop ispezionata tramite screenshot locale.
+- Inventario reale verificato localmente su copia temporanea di SQLite: 91 documenti, 32 candidati d’esame, 12 documenti di trascrizione, 14 allineamenti, 1 duplicato e 5 avvisi sui documenti. Nessun tentativo sintetico aggiunto all’archivio personale.
+- Preparato il payload locale di tre quesiti reali annotati (definizioni PRAM, pseudocodice SIMD, Pack del secondo parziale). La classificazione con OpenAI gpt-6.1-sol non è stata eseguita: la revisione automatica ha respinto l’invio degli estratti perché richiede autorizzazione specifica per quel payload e quella destinazione. Il comando di verifica senza --send prepara solo il file locale.
+- Restano da verificare la correttezza didattica del primo capitolo reale con il provider personale, una sessione dello studente e una prova differita su problemi nuovi. I test tecnici non dimostrano apprendimento o un voto atteso.

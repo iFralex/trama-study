@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .config import data_root, load_config
 from .study_beginner import BeginnerStudy
+from .study_course import CourseStudy
 
 
 def now():
@@ -50,7 +51,7 @@ TRANSLATIONS={'riduzione':'reduction','parallela':'parallel','parallelo':'parall
  'somma':'sum','modelli':'models','accessi':'access'}
 
 
-class Study(BeginnerStudy):
+class Study(BeginnerStudy, CourseStudy):
     def __init__(self, root, database=None):
         self.root = Path(root).resolve()
         if not self.root.is_dir():
@@ -83,6 +84,7 @@ class Study(BeginnerStudy):
         ''')
         self.db.commit()
         self.setup_beginner()
+        self.setup_course_study()
 
     def courses(self):
         base = self.root / 'corsi'
@@ -233,6 +235,7 @@ class Study(BeginnerStudy):
                 self.db.execute('DELETE FROM search WHERE id IN (SELECT id FROM passages WHERE document=?)', (did,))
                 self.db.execute('DELETE FROM passages WHERE document=?', (did,))
                 self.db.execute('DELETE FROM documents WHERE id=?', (did,))
+        self.course_apply_reservations(course)
         return {'changed':changed, 'passages': self.db.execute('SELECT count(*) FROM passages WHERE course=?',(course,)).fetchone()[0], 'issues':issues}
 
     def source(self, source_id, allow_reserved=False, allow_solutions=True):
@@ -340,10 +343,18 @@ class Study(BeginnerStudy):
         self.seed(sid)
         return self.view(sid)
 
-    def create_activity(self, sid, spec, activity_id=None):
+    def create_activity(self, sid, spec, activity_id=None, chapter=None):
         session=self.session(sid)
         if session['mode']=='exam':
             raise ValueError('Durante la simulazione non si aggiungono attività generate.')
+        curriculum=self._path_for_session(sid)
+        if curriculum:
+            target=chapter or curriculum['chapter']
+            if not target or target not in {c['id'] for c in self._plan(curriculum['path'])['data']['chapters']}:raise ValueError('Apri prima un capitolo valido del percorso.')
+            self._refs(session['course'],spec.get('sources'))
+            if spec.get('kind')!='explain' and not all(spec.get(k) for k in ('solution','rubric','origin','assumptions')):raise ValueError('Prepara soluzione e criteri prima di proporre un esercizio.')
+            if spec.get('kind')=='html' and not all(spec.get(k) for k in ('model','fallback')):raise ValueError('Dichiara modello e alternativa testuale del laboratorio.')
+            spec=dict(spec,concept=curriculum['path']+':'+target,curriculum={'path':curriculum['path'],'chapter':target,'extra':True})
         learning=self.beginner_context(sid)
         if learning:
             if not learning['current_unit']:raise ValueError('Prepara prima un piano fondato sulle fonti della lezione con set_lesson_plan.')
@@ -461,7 +472,7 @@ class Study(BeginnerStudy):
             activities.append({'id':r['id'],'version':r['version'],'spec':public,'state':json.loads(r['state']),'created':r['created']})
         messages=[dict(r) for r in self.db.execute('SELECT * FROM messages WHERE session=? ORDER BY rowid',(sid,))]
         attempts=[dict(r,answer=json.loads(r['answer']),grade=json.loads(r['grade'])) for r in self.db.execute('SELECT * FROM attempts WHERE session=? ORDER BY rowid',(sid,))]
-        return {'learning':self.beginner_context(sid),'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])}
+        return {'curriculum':self.course_context_public(sid),'learning':self.beginner_context(sid),'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])}
 
     def activity(self,sid,aid,version):
         row=self.db.execute('SELECT * FROM activities WHERE id=? AND version=? AND session=?',(aid,int(version),sid)).fetchone()
@@ -476,7 +487,7 @@ class Study(BeginnerStudy):
             raise ValueError('Risposta troppo grande.')
         activity=self.activity(sid,aid,version)
         session=self.session(sid)
-        if session['mode']=='exam' and kind in ('hint','explain','solution'):
+        if (session['mode']=='exam' or activity['spec'].get('curriculum',{}).get('recall')) and kind in ('hint','explain','solution'):
             raise ValueError('Gli aiuti sono disponibili dopo la consegna.')
         previous=self.db.execute('SELECT * FROM events WHERE id=?',(event_id,)).fetchone()
         if previous:
@@ -503,6 +514,7 @@ class Study(BeginnerStudy):
                 self.db.execute('INSERT INTO attempts VALUES(?,?,?,?,?,?,?,?,?,?,?)',(attempt_id,event_id,sid,aid,version,activity['spec'].get('concept','general'),encoded(payload.get('answer')),encoded(grade),aids,now(),None))
                 response['attempt']={'id':attempt_id,'grade':grade,'aids':aids,'concept':activity['spec'].get('concept','general')}
             self.db.execute('UPDATE sessions SET updated=? WHERE id=?',(now(),sid))
+            self.course_record_event(sid,aid,version,event_id,kind,response)
         return response
 
     @staticmethod
@@ -596,8 +608,8 @@ class Study(BeginnerStudy):
     def context(self,sid):
         view=self.view(sid)
         s=view['session']
-        events=[dict(r,payload=json.loads(r['payload'])) for r in self.db.execute('SELECT kind,payload,activity,version,created FROM events WHERE session=? ORDER BY rowid DESC LIMIT 40',(sid,))]
-        return {'learning':self.beginner_context(sid),'session':s,'progress':view['progress'],'recommendation':view['recommendation'],'activity':next((a for a in reversed(view['activities']) if a['id']==s['current'] and (not s.get('current_version') or a['version']==s['current_version'])),None),'attempts':view['attempts'][-12:],'interactions':events}
+        events=[dict(r,payload=json.loads(r['payload'])) for r in self.db.execute('SELECT id,kind,payload,activity,version,created FROM events WHERE session=? ORDER BY rowid DESC LIMIT 40',(sid,))]
+        return {'curriculum':self.course_context(sid),'learning':self.beginner_context(sid),'session':s,'progress':view['progress'],'recommendation':view['recommendation'],'activity':next((a for a in reversed(view['activities']) if a['id']==s['current'] and (not s.get('current_version') or a['version']==s['current_version'])),None),'attempts':view['attempts'][-12:],'interactions':events}
 
     def recommendation(self,course):
         progress=self.progress(course)
@@ -709,6 +721,8 @@ class Study(BeginnerStudy):
         if self.session(sid)['mode']=='exam':
             raise ValueError('Storico escluso dal contesto della simulazione.')
         view=self.view(target)
+        if view['session']['mode']=='exam' or any(self.db.execute('SELECT 1 FROM passages WHERE id=? AND reserved=1',(ref,)).fetchone() for a in view['activities'] for ref in a['spec'].get('sources',[])):
+            raise ValueError('Questa sessione contiene una prova riservata: non entra nel contesto del tutor.')
         offset=max(0,int(offset));limit=max(1,min(int(limit),50))
         return {'session':view['session'],'messages':view['messages'][offset:offset+limit],
                 'total_messages':len(view['messages']),
@@ -762,7 +776,7 @@ class Study(BeginnerStudy):
         return [dict(self.source(source),semantic_score=score) for source,score in sorted(best.items(),key=lambda x:x[1],reverse=True)[:max(1,min(int(limit),30))]]
 
     def dispatch(self,method,args):
-        allowed={'select_beginner_unit','course_lessons','lesson_bundle','beginner_context','set_lesson_plan','select_lesson','advance_beginner','beginner_recall','installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
+        allowed={'course_coverage','course_scope_material','course_cards','course_note_evidence','course_recalls','course_recall_card','course_create_recall','course_exit_recall','course_focus','course_expose','course_inventory','course_create','course_paths','course_path_view','course_context','course_confirm','course_sync','course_task','course_commit','course_exam_profile','course_status','course_open','course_select','course_position','course_detour','course_journal','course_note','course_correct_note','course_evidence','course_revise','course_undo','course_append','course_simulation','course_unlock','select_beginner_unit','course_lessons','lesson_bundle','beginner_context','set_lesson_plan','select_lesson','advance_beginner','beginner_recall','installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
         if method not in allowed:
             raise ValueError('Metodo non disponibile.')
         return getattr(self,method)(**args)
