@@ -1,0 +1,6 @@
+.venv/
+.state/
+corsi/
+__pycache__/
+*.egg-info/
+.DS_Store
