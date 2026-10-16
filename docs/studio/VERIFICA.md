@@ -42,3 +42,8 @@ I tentativi automatici nel browser usano un archivio fittizio separato. Non veng
 - 5 percorsi Playwright passati, compreso avvio dalle basi, provider assente, richiesta conservata, ricaricamento, ripresa e programma delle lezioni.
 - Catalogo reale verificato in memoria: 14 lezioni in ordine, dal 16 settembre al 4 novembre 2025; 12 con trascrizione indicizzata e 2 con soli OCR/associazioni, segnalate. Prima lezione: 26 passaggi e 7 pagine PDF associate. Nessuna sessione fittizia aggiunta al catalogo personale.
 - I contenuti del tutor commerciale richiedono una verifica didattica reale: questi test verificano contratto, fonti, salvataggi e UX, non certificano correttezza o apprendimento.
+
+
+## Formule accessibili — 16 ottobre 2026
+
+12 test TypeScript/Pi e 6 percorsi browser passati. Descrizioni italiane reali verificate per `T(n)=an+b`, frazioni, quadrati e pedici, senza ripetizione dell'annotazione TeX. La formula è un singolo oggetto accessibile e il hit test sulla `n` restituisce il contenitore intero. Verificate persistenza, modalità testuale e ripristino del MathML. Il test non avvia la voce nativa macOS; resta necessaria la prova con la lettura sotto il puntatore dell'utente.

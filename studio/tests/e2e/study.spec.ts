@@ -120,3 +120,22 @@ test('beginner mode starts from course sources and resumes its lesson phase afte
   await page.getByRole('button',{name:'Programma',exact:true}).click();
   await expect(page.getByRole('button',{name:'Studia questa lezione →'}).first()).toBeVisible();
 });
+
+test('math is one accessible object under the pointer, with persistent text and symbol alternatives',async({page})=>{
+  await page.route('**/api/sessions',async route=>{
+    const response=await route.fetch(),view=await response.json();
+    view.messages.push({id:'accessible-formula',role:'assistant',text:'Il costo è $T(n)=an+b$.',created:'2099-01-01T00:00:00Z'});
+    await route.fulfill({json:view});
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Inizia una nuova sessione',exact:true}).click();
+  const formula=page.getByRole('math',{name:/T maiuscola.*uguale a a n più b/});
+  await expect(formula).toBeVisible();await expect(formula.locator('.katex-html')).toBeVisible();
+  const tree=await formula.ariaSnapshot();expect(tree.trim().split('\n').length).toBe(1);
+  await formula.scrollIntoViewIfNeeded();
+  const glyph=formula.locator('.katex-html .mord').filter({hasText:/^n$/}).first();const box=await glyph.boundingBox();expect(box).not.toBeNull();
+  const target=await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.classList.contains('math-unit'),{x:box!.x+box!.width/2,y:box!.y+box!.height/2});expect(target).toBe(true);
+  await page.getByText('Accessibilità',{exact:true}).click();const mode=page.getByLabel('Modalità di lettura delle formule');
+  await mode.selectOption('text');await expect(page.locator('.math-readable').filter({hasText:/T maiuscola/})).toBeVisible();await expect(formula).toHaveCount(0);
+  await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();await expect(page.locator('.math-readable').filter({hasText:/T maiuscola/})).toBeVisible();
+  await page.getByText('Accessibilità',{exact:true}).click();await mode.selectOption('symbols');await expect(page.locator('.math-unit[role="math"]')).toHaveCount(0);await expect(page.locator('.katex-html').first()).toBeVisible();
+});

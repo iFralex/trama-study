@@ -8,6 +8,7 @@ import {Bridge} from './bridge';
 import {Tutor} from './tutor';
 import {Embeddings} from './embeddings';
 import {installationLoginOptions} from './login';
+import {mathSpeech} from './math-speech';
 
 const directory=path.dirname(fileURLToPath(import.meta.url));
 const project=process.env.STUDIO_PROJECT??path.resolve(directory,'../..');
@@ -29,6 +30,7 @@ app.use((req,res,next)=>{
 });
 app.use(express.json({limit:'250kb'}));
 const run=(handler:(req:any,res:any)=>Promise<any>)=>(req:any,res:any,next:any)=>{handler(req,res).catch(next);};
+app.post('/api/math-speech',run(async(req,res)=>res.json(await mathSpeech(req.body.tex))));
 app.get('/api/bootstrap',run(async(_req,res)=>res.json(await bridge.call('bootstrap'))));
 app.post('/api/import',run(async(req,res)=>{const result=await bridge.call('import_course',{course:req.body.course});embeddings.index(req.body.course);res.json(result);}));
 app.get('/api/embeddings',(_req,res)=>res.json(Object.fromEntries(embeddings.jobs)));
