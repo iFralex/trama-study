@@ -13,7 +13,7 @@ React/Vite e assistant-ui rendono messaggi Markdown, formule e parti tool-call `
 - `GET /api/sessions/:sid/{search,sources/:id,media/:id,page/:id}`: ricerca, passaggi, file originali e rendering PDF; controlli su corso e modalità anche lato server.
 - `/api/models`, `/api/model`, `/api/login`: catalogo, scelta e interazione con i provider Pi. Nessuna chiave passa nella cronologia didattica.
 
-Pi dispone soltanto di search_sources, read_source, get_context e create_activity. Le spiegazioni citano ID effettivi con `[titolo](source:ID)`. Durante la simulazione il tutor conversazionale non viene eseguito. Il valutatore successivo non eredita la storia dello studio.
+Pi dispone soltanto di strumenti didattici: search_sources, read_source, list_materials, grep_materials, read_material, search_sessions, read_session, web_search, read_web_page, get_context e create_activity. Le spiegazioni citano ID effettivi con `[titolo](source:ID)`. Durante la simulazione il tutor conversazionale non viene eseguito. Il valutatore successivo non eredita la storia dello studio.
 
 La preparazione della correzione verifica che il tentativo sia stato consegnato e appartenga alla sessione; aggiunge gli eventuali PDF `.sol.pdf` associati alle domande, conservando la distinzione tra domanda e soluzione. Questo accesso non viene esposto agli strumenti del tutor durante la prova. Anche usando una soluzione ufficiale, il giudizio linguistico rimane provvisorio.
 
@@ -30,3 +30,11 @@ Il prossimo passo usa fonti, prerequisiti, tentativi, aiuti e richiami; lo stude
 Riferimenti progettuali: [Explorable Explanations](https://worrydream.com/ExplorableExplanations/), [PhET](https://phet.colorado.edu/en/teaching-resources/teaching-with-phet/small-group), [Quantum Country](https://andymatuschak.org/hmwl/), [Cognitive Tutors](https://www.cmu.edu/datalab/research/index.html), [assistant-ui](https://www.assistant-ui.com/docs/tools/generative-ui), [pi-artifacts](https://github.com/jakeryderv/pi-artifacts).
 
 Il disegno distingue prestazione assistita e apprendimento autonomo, coerentemente con i risultati contestuali di [Kestin et al.](https://doi.org/10.1038/s41598-025-97652-6) e [Bastani et al.](https://doi.org/10.1073/pnas.2422633122). Nessuno dei due studi certifica l'efficacia di questa applicazione o un voto futuro.
+
+## Indice semantico e storico
+
+Un processo Python ONNX separato calcola vettori senza accesso al database. Node orchestra batch e richieste; il processo Study conserva l'unica responsabilità delle scritture SQLite. I vettori float32 normalizzati sono associati a sorgente, chunk, hash del testo e identità del modello. Gli originali restano fuori dal database. I filtri di corso, temi riservati e disponibilità vengono applicati prima del ranking semantico. La fusione dei ranking testuale e semantico usa reciprocal rank fusion con un lieve peso a favore del testo esatto.
+
+`GET /api/history` cerca le sessioni del corso; `POST /api/sessions/:sid/resume` ricorda la sessione selezionata. Gli strumenti di memoria leggono gli snapshot esistenti, non modificano il cursore di studio. Lo storico non entra automaticamente nel contesto del modello e le richieste del tutor sono bloccate nella simulazione.
+
+Le letture web usano DNS verificato con IP fissato per la connessione, controllo dei redirect, TLS e limiti di dimensione/tempo. Il PDF viene estratto dal processo Python. Il testo esterno è dato non fidato e rimane separato dalle fonti del corso. Le regole epistemiche sono nel prompt del tutor; non si attribuisce al modello una misura di certezza assoluta.

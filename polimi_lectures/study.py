@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 import uuid
+import struct
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -74,6 +75,8 @@ class Study:
             concept TEXT,answer TEXT,grade TEXT,aids INTEGER,created TEXT,correction TEXT);
           CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY,course TEXT,concept TEXT,due TEXT,card TEXT,last_attempt TEXT);
           CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
+          CREATE TABLE IF NOT EXISTS vectors(source TEXT,chunk INTEGER,model TEXT,fingerprint TEXT,vector BLOB,
+            PRIMARY KEY(source,chunk,model));
           CREATE INDEX IF NOT EXISTS passages_course ON passages(course);
           CREATE INDEX IF NOT EXISTS events_activity ON events(activity,version);
         ''')
@@ -125,6 +128,8 @@ class Study:
         holdout = exams[-1].name.replace('.pdf', '') if exams else None
         files = pdfs + sorted(materials.rglob('*.ipynb')) + sorted(base.glob('*/trascrizione/trascrizione.json'))
         files += sorted(base.glob('*/allineamento/allineamento.json'))
+        text_types={'.html','.htm','.txt','.md','.py','.c','.cpp','.h','.hpp','.cu','.java','.m','.r'}
+        files += sorted(p for p in materials.rglob('*') if p.is_file() and p.suffix.lower() in text_types)
         changed, issues, present = 0, [], []
         for path in files:
             relative = str(path.relative_to(self.root))
@@ -167,6 +172,17 @@ class Study:
                         text = re.sub(r'<!--[\s\S]*?-->', '', text)
                         if text.strip():
                             records.append((i, 'notebook', text, i, None, None, 'originale', {'cell_kind': cell.get('cell_type')}))
+                elif path.suffix.lower() in text_types:
+                    text=path.read_text(encoding='utf-8',errors='replace')
+                    if path.suffix.lower() in ('.html','.htm'):
+                        from html import unescape
+                        text=re.sub(r'<(script|style)\b[^>]*>[\s\S]*?</\1>', '', text, flags=re.I)
+                        text=re.sub(r'<!--[\s\S]*?-->', '', text)
+                        text=unescape(re.sub(r'<[^>]+>', '\n', text))
+                    lines=text.splitlines()
+                    for i in range(0,len(lines),100):
+                        part='\n'.join(lines[i:i+100]).strip()
+                        if part:records.append((i,'text',part,None,None,None,'originale',{'first_line':i+1}))
                 elif path.name == 'trascrizione.json':
                     transcript = json.loads(path.read_text())
                     quality = 'trascrizione completa' if (path.parent/'completa.json').exists() else 'trascrizione parziale'
@@ -189,7 +205,7 @@ class Study:
                     self.db.execute('DELETE FROM passages WHERE document=?', (did,))
                     for number, kind, text, page, start, end, quality, metadata in records:
                         pid = '%s:%s' % (did, number)
-                        title = path.name if kind in ('pdf','notebook') else path.parent.parent.name[:105]
+                        title = path.name if kind in ('pdf','notebook','text') else path.parent.parent.name[:105]
                         self.db.execute('INSERT INTO passages VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                             (pid,did,course,kind,title,relative,page,start,end,text,quality,reserved,solution,encoded(metadata)))
                         self.db.execute('INSERT INTO search VALUES(?,?,?,?)', (pid,course,title,text))
@@ -285,6 +301,7 @@ class Study:
         mid=uid()
         with self.db:
             self.db.execute('INSERT INTO messages VALUES(?,?,?,?,?)',(mid,session,role,str(text)[:100000],now()))
+            self.db.execute('UPDATE sessions SET updated=? WHERE id=?',(now(),session))
         return mid
 
     def open_session(self, course, goal='Capire e saper risolvere', minutes=25, mode='learn', fresh=False):
@@ -586,8 +603,138 @@ class Study:
             self.db.execute('UPDATE sessions SET goal=?,minutes=?,updated=? WHERE id=?',(str(goal)[:200],max(5,min(int(minutes),180)),now(),sid))
         return self.view(sid)
 
+    def resume_session(self, target):
+        session=self.session(target)
+        self.setting('last_course',session['course'])
+        with self.db:self.db.execute('UPDATE sessions SET updated=? WHERE id=?',(now(),target))
+        return self.view(target)
+
+    def web_pdf(self, data, page=1):
+        import base64
+        import pymupdf
+        if len(data)>4_000_000:raise ValueError('PDF web troppo grande.')
+        with pymupdf.open(stream=base64.b64decode(data,validate=True),filetype='pdf') as doc:
+            start=max(0,int(page)-1)
+            if start>=len(doc):raise ValueError('Pagina non disponibile.')
+            return {'total_pages':len(doc),'first_page':start+1,'text':'\n'.join('PAGE %d\n%s'%(i+1,doc[i].get_text()) for i in range(start,min(start+12,len(doc))))[:24000]}
+
+    def list_materials(self, sid, query='', offset=0, limit=30):
+        session=self.session(sid)
+        if session['mode']=='exam':
+            raise ValueError('Archivio non consultabile durante la simulazione.')
+        rows=self.db.execute("""SELECT d.id,d.path,COUNT(p.id) passages,MIN(p.kind) kind
+          FROM documents d JOIN passages p ON p.document=d.id
+          WHERE d.course=? AND d.issue IS NULL AND p.reserved=0 AND instr(lower(d.path),lower(?))>0
+          GROUP BY d.id ORDER BY d.path LIMIT ? OFFSET ?""",
+          (session['course'],str(query)[:200],max(1,min(int(limit),50)),max(0,int(offset)))).fetchall()
+        return [dict(r) for r in rows]
+
+    def read_material(self, sid, document, start=1, end=80):
+        session=self.session(sid)
+        if session['mode']=='exam':
+            raise ValueError('Archivio non consultabile durante la simulazione.')
+        start=max(1,int(start));end=min(max(start,int(end)),start+199)
+        rows=self.db.execute("""SELECT p.* FROM passages p JOIN documents d ON d.id=p.document
+          WHERE p.document=? AND p.course=? AND d.issue IS NULL AND p.reserved=0
+          ORDER BY COALESCE(p.page,0),COALESCE(p.start,0),p.rowid""",(document,session['course'])).fetchall()
+        if not rows:
+            raise ValueError('Materiale non disponibile nel corso corrente.')
+        lines=[];number=0
+        for row in rows:
+            for text in row['text'].splitlines():
+                number+=1
+                if start<=number<=end:
+                    lines.append({'line':number,'text':text,'source':row['id'],'page':row['page'],'start':row['start'],'quality':row['quality']})
+        return {'document':document,'total_lines':number,'lines':lines}
+
+    def grep_materials(self, sid, pattern, document=None, limit=30):
+        session=self.session(sid)
+        if session['mode']=='exam':
+            raise ValueError('Ricerca sospesa durante la simulazione.')
+        pattern=str(pattern)[:300]
+        if not pattern.strip():
+            raise ValueError('Specifica un testo da cercare.')
+        rows=self.db.execute("""SELECT p.* FROM passages p JOIN documents d ON d.id=p.document
+          WHERE p.course=? AND p.reserved=0 AND d.issue IS NULL AND (? IS NULL OR p.document=?)
+          ORDER BY p.document,COALESCE(p.page,0),COALESCE(p.start,0),p.rowid""",(session['course'],document,document))
+        output=[];numbers={}
+        for row in rows:
+            for text in row['text'].splitlines():
+                n=numbers.get(row['document'],0)+1;numbers[row['document']]=n
+                if pattern.casefold() in text.casefold():
+                    output.append({'source':row['id'],'document':row['document'],'path':row['path'],'line':n,'text':text[:1500],'page':row['page'],'start':row['start']})
+                    if len(output)>=max(1,min(int(limit),50)):
+                        return output
+        return output
+
+    def list_sessions(self, course=None, query='', offset=0, limit=30, sid=None):
+        if sid and self.session(sid)['mode']=='exam':
+            raise ValueError('Storico escluso dal contesto della simulazione.')
+        if course:
+            self.course_path(course)
+        return [dict(r) for r in self.db.execute("""SELECT s.*, (SELECT count(*) FROM messages m WHERE m.session=s.id) messages
+          FROM sessions s WHERE (? IS NULL OR s.course=?) AND (instr(lower(s.goal),lower(?))>0 OR EXISTS
+          (SELECT 1 FROM messages m WHERE m.session=s.id AND instr(lower(m.text),lower(?))>0))
+          ORDER BY s.updated DESC LIMIT ? OFFSET ?""",(course,course,str(query)[:300],str(query)[:300],max(1,min(int(limit),50)),max(0,int(offset))))]
+
+    def read_session(self, sid, target, offset=0, limit=30, activity_offset=0, attempt_offset=0):
+        if self.session(sid)['mode']=='exam':
+            raise ValueError('Storico escluso dal contesto della simulazione.')
+        view=self.view(target)
+        offset=max(0,int(offset));limit=max(1,min(int(limit),50))
+        return {'session':view['session'],'messages':view['messages'][offset:offset+limit],
+                'total_messages':len(view['messages']),
+                'activities':view['activities'][max(0,int(activity_offset)):max(0,int(activity_offset))+10],
+                'total_activities':len(view['activities']),
+                'attempts':view['attempts'][max(0,int(attempt_offset)):max(0,int(attempt_offset))+20],
+                'total_attempts':len(view['attempts'])}
+
+    def embedding_batch(self, course, model, limit=16):
+        self.course_path(course)
+        # Fingerprints are hashes on disk; compare in Python to avoid a SQLite extension.
+        rows=self.db.execute('SELECT p.id,p.text,p.title FROM passages p JOIN documents d ON d.id=p.document WHERE p.course=? AND d.issue IS NULL ORDER BY p.rowid',(course,)).fetchall()
+        done={r[0]:r[1] for r in self.db.execute('SELECT source,fingerprint FROM vectors WHERE model=? GROUP BY source',(model,))}
+        pending=[dict(r,fingerprint=key(r['text'])) for r in rows if done.get(r['id'])!=key(r['text'])]
+        return {'pending':len(pending),'total':len(rows),'items':pending[:max(1,min(int(limit),32))]}
+
+    def save_embeddings(self, model, items):
+        if len(items)>32:
+            raise ValueError('Batch troppo grande.')
+        with self.db:
+            for item in items:
+                row=self.db.execute('SELECT text FROM passages WHERE id=?',(item['id'],)).fetchone()
+                if not row or key(row['text'])!=item['fingerprint']:
+                    continue  # Source changed while the worker was computing.
+                vectors=item['vectors']
+                if not vectors or len(vectors)>1000 or any(len(v)!=384 or not all(math.isfinite(float(x)) for x in v) for v in vectors):
+                    raise ValueError('Vettore non valido.')
+                self.db.execute('DELETE FROM vectors WHERE source=? AND model=?',(item['id'],model))
+                for index,vector in enumerate(vectors):
+                    norm=math.sqrt(sum(float(x)**2 for x in vector))
+                    if norm==0:raise ValueError('Vettore nullo.')
+                    self.db.execute('INSERT INTO vectors VALUES(?,?,?,?,?)',(item['id'],index,model,item['fingerprint'],struct.pack('<384f',*[float(x)/norm for x in vector])))
+            self.db.execute('DELETE FROM vectors WHERE source NOT IN (SELECT id FROM passages)')
+        return {'saved':len(items)}
+
+    def semantic_search(self, course, query_vector, model, limit=20, mode='learn'):
+        self.course_path(course)
+        if mode=='exam':
+            raise ValueError('Ricerca sospesa durante la simulazione.')
+        if len(query_vector)!=384 or not all(math.isfinite(float(x)) for x in query_vector):
+            raise ValueError('Vettore non valido.')
+        import numpy as np
+        rows=self.db.execute("""SELECT v.source,v.vector,v.fingerprint,p.text FROM vectors v JOIN passages p ON p.id=v.source
+          JOIN documents d ON d.id=p.document WHERE p.course=? AND p.reserved=0 AND d.issue IS NULL AND v.model=?""",(course,model)).fetchall()
+        rows=[r for r in rows if r['fingerprint']==key(r['text'])]
+        if not rows:return []
+        q=np.asarray(query_vector,dtype=np.float32);q/=max(float(np.linalg.norm(q)),1e-12)
+        scores=np.stack([np.frombuffer(r['vector'],dtype='<f4') for r in rows])@q
+        best={}
+        for row,score in zip(rows,scores):best[row['source']]=max(best.get(row['source'],-1),float(score))
+        return [dict(self.source(source),semantic_score=score) for source,score in sorted(best.items(),key=lambda x:x[1],reverse=True)[:max(1,min(int(limit),30))]]
+
     def dispatch(self,method,args):
-        allowed={'bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
+        allowed={'resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
         if method not in allowed:
             raise ValueError('Metodo non disponibile.')
         return getattr(self,method)(**args)

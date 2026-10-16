@@ -1,0 +1,5 @@
+[
+  {"query":"Come si combinano molti numeri in un solo risultato usando un albero?","documents":["exercise_session-1.pdf"]},
+  {"query":"Quando più processori leggono la stessa cella, chi può scriverla?","documents":["lecture2-PRAM.pdf"]},
+  {"query":"How do adjacent GPU threads access consecutive memory locations?","documents":["lecture-5_gpuarch.pdf"]}
+]

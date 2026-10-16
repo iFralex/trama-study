@@ -21,6 +21,8 @@ test('actual Pi SDK streams, calls study tools, sees interactions and assesses s
     if(!body.tools?.length){push({content:JSON.stringify({correct:true,feedback:'Coerente con la fonte, verifica le ipotesi.',rubric:'Letture e scritture'})});push({},'stop');}
     else if(toolStep++===0){push({role:'assistant',tool_calls:[{index:0,id:'search1',type:'function',function:{name:'search_sources',arguments:'{"query":"PRAM"}'}}]});push({},'tool_calls');}
     else if(toolStep===2){push({role:'assistant',tool_calls:[{index:0,id:'activity1',type:'function',function:{name:'create_activity',arguments:JSON.stringify({spec:{kind:'html',title:'Prova',prompt:'Modifica il numero.',concept:'pram',sources:['source1'],html:'<input data-key="processors" value="4">',fallback:'Quattro processori.'}})}}]});push({},'tool_calls');}
+    else if(toolStep===3){push({role:'assistant',tool_calls:[{index:0,id:'history1',type:'function',function:{name:'read_session',arguments:'{"target":"previous"}'}}]});push({},'tool_calls');}
+    else if(toolStep===4){push({role:'assistant',tool_calls:[{index:0,id:'grep1',type:'function',function:{name:'grep_materials',arguments:'{"pattern":"threadIdx"}'}}]});push({},'tool_calls');}
     else{push({content:'**PRAM**: osserviamo il caso. [Fonte](source:source1)'});push({},'stop');}
     res.end('data: [DONE]\n\n');
   });
@@ -29,6 +31,8 @@ test('actual Pi SDK streams, calls study tools, sees interactions and assesses s
   const context={session:{id:'study',course:'course',mode:'learn'},progress:[],activity:null,interactions:[{kind:'try',payload:{processors:4}}],attempts:[{id:'attempt1',activity:'a',version:1,answer:'CREW',grade:{status:'provisional'}}]};
   const bridge={async call(method:string,args:any={}){calls.push({method,args});
     if(method==='setting')return null;
+    if(method==='read_session')return {session:{id:'previous'},messages:[{role:'user',text:'Rivedere le letture concorrenti'}]};
+    if(method==='grep_materials')return [{source:'source1',line:2,text:'int i = threadIdx.x;'}];
     if(method==='context')return context;
     if(method==='message'){messages.push(args);return 'm';}
     if(method==='search')return [{id:'source1',course:'course',text:'CREW concurrent reads, exclusive writes.',quality:'originale'}];
@@ -43,10 +47,10 @@ test('actual Pi SDK streams, calls study tools, sees interactions and assesses s
     const runtime=await ModelRuntime.create({authPath:path.join(root,'auth.json'),modelsPath:null,modelsStorePath:path.join(root,'models.json'),refreshOnCreate:false});
     runtime.registerProvider('study-test',{name:'Test only',api:'openai-completions',baseUrl:`http://127.0.0.1:${address.port}/v1`,apiKey:'test-only',models:[{id:'test-model',name:'Test',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:32000,maxTokens:4000}]});
     const tutor=new Tutor(bridge,root);tutor.runtime=runtime;
-    let output='';await tutor.chat('study','Spiega e fammi provare.',delta=>output+=delta);
-    assert.match(output,/PRAM/);assert.ok(calls.some(c=>c.method==='search'));assert.ok(calls.some(c=>c.method==='create_activity'));
+    let output='';await tutor.chat('study','Recupera la sessione previous, cerca threadIdx nel codice, spiega e fammi provare.',delta=>output+=delta);
+    assert.match(output,/PRAM/);assert.ok(calls.some(c=>c.method==='search'));assert.ok(calls.some(c=>c.method==='create_activity'));assert.ok(calls.some(c=>c.method==='read_session'));assert.ok(calls.some(c=>c.method==='grep_materials'));
     const contextText=JSON.stringify(requests[0].messages);assert.match(contextText,/processors/);
-    assert.deepEqual(requests[0].tools.map((t:any)=>t.function.name).sort(),['create_activity','get_context','read_source','search_sources']);
+    assert.deepEqual(requests[0].tools.map((t:any)=>t.function.name).sort(),['create_activity','get_context','grep_materials','list_materials','read_material','read_session','read_source','read_web_page','search_sessions','search_sources','web_search']);
     assert.ok(messages.some(m=>m.role==='user'));assert.ok(messages.some(m=>m.role==='assistant'));
     const grade=await tutor.assess('study','attempt1');assert.equal(grade.status,'provisional');assert.equal(requests.at(-1).tools?.length??0,0);
     const before=requests.length;context.session.mode='exam';await assert.rejects(()=>tutor.chat('study','Give answers',()=>{}),/simulazione/);assert.equal(requests.length,before);

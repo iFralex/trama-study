@@ -27,6 +27,14 @@ def main():
         raise ValueError('Serve Node.js 22 o successivo; versione rilevata: '+version)
     from .alignment import ensure_runtime
     python=asyncio.run(ensure_runtime(root))
+    embedding_python=root/'.state/embeddings-runtime/bin/python'
+    if not embedding_python.exists():
+        print('Preparo gli embeddings locali sul disco dati…',flush=True)
+        subprocess.run([str(python),'-m','venv',str(embedding_python.parent.parent)],check=True)
+    embedding_stamp=root/'.state/embeddings-runtime/installed.version'
+    if not embedding_stamp.exists() or embedding_stamp.read_text()!='fastembed==0.7.4':
+        subprocess.run([str(embedding_python),'-m','pip','install','--cache-dir',str(root/'.state/pip-cache'),'fastembed==0.7.4'],check=True)
+        embedding_stamp.write_text('fastembed==0.7.4')
     tools=root/'.state/studio-dependencies'
     tools.mkdir(parents=True,exist_ok=True)
     digest=hashlib.sha256((frontend/'package-lock.json').read_bytes()).hexdigest()

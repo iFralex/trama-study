@@ -151,5 +151,59 @@ class StudyTest(unittest.TestCase):
         self.store.event(self.sid,a['id'],1,'delayed','submit',{'answer':'CRCW'})
         self.assertEqual(self.store.progress(self.course)[0]['status'],'riconfermato a distanza')
 
+    def test_file_navigation_matches_citations_and_lines(self):
+        docs=self.store.list_materials(self.sid,'lecture.pdf')
+        self.assertEqual(len(docs),1)
+        hits=self.store.grep_materials(self.sid,'exclusive',docs[0]['id'])
+        self.assertTrue(hits)
+        excerpt=self.store.read_material(self.sid,docs[0]['id'],hits[0]['line'],hits[0]['line'])
+        self.assertEqual(excerpt['lines'][0]['source'],hits[0]['source'])
+        self.assertEqual(excerpt['lines'][0]['text'],hits[0]['text'])
+        self.assertFalse(self.store.grep_materials(self.sid,'Reserved unique'))
+        with self.assertRaises(ValueError):self.store.read_material(self.sid,'../../secret')
+        materials=self.root/'corsi'/self.course/'materiali'
+        (materials/'kernel.cu').write_text('__global__ void sum() {\n  int i = threadIdx.x;\n}')
+        (materials/'Links.html').write_text('<p>Course links</p><script>hidden_script</script>')
+        self.store.import_course(self.course)
+        self.assertTrue(self.store.grep_materials(self.sid,'threadIdx.x'))
+        self.assertFalse(self.store.grep_materials(self.sid,'hidden_script'))
+
+    def test_history_search_restore_and_exam_context_block(self):
+        self.store.message(self.sid,'user','Riprendiamo la riduzione ad albero')
+        self.event('change',{'answer':'saved history draft'},'historydraft')
+        other=self.store.open_session(self.course,fresh=True)['session']['id']
+        found=self.store.list_sessions(self.course,'riduzione',sid=other)
+        self.assertEqual(found[0]['id'],self.sid)
+        history=self.store.read_session(other,self.sid)
+        self.assertIn('riduzione',history['messages'][-1]['text'])
+        self.assertEqual(history['activities'][-1]['state']['answer'],'saved history draft')
+        self.assertEqual(self.store.session(other)['id'],other)
+        self.store.resume_session(self.sid)
+        self.assertEqual(self.store.open_session(self.course)['session']['id'],self.sid)
+        exam=self.store.open_session(self.course,mode='exam',fresh=True)['session']['id']
+        with self.assertRaises(ValueError):self.store.read_session(exam,self.sid)
+        with self.assertRaises(ValueError):self.store.list_sessions(sid=exam)
+        with self.assertRaises(ValueError):self.store.list_materials(exam)
+        with self.assertRaises(ValueError):self.store.grep_materials(exam,'answer')
+
+    def test_semantic_index_incremental_stale_and_permissions(self):
+        from polimi_lectures.study import key
+        batch=self.store.embedding_batch(self.course,'test-model',32)
+        vector=[1.0]+[0.0]*383
+        self.store.save_embeddings('test-model',[{'id':p['id'],'fingerprint':p['fingerprint'],'vectors':[vector]} for p in batch['items']])
+        self.assertEqual(self.store.embedding_batch(self.course,'test-model')['pending'],0)
+        results=self.store.semantic_search(self.course,vector,'test-model')
+        self.assertTrue(results)
+        self.assertFalse(any(s['reserved'] for s in results))
+        with self.assertRaises(ValueError):self.store.semantic_search(self.course,vector,'test-model',mode='exam')
+        source=results[0]['id']
+        with self.store.db:self.store.db.execute('UPDATE passages SET text=? WHERE id=?',('changed text',source))
+        self.assertFalse(any(r['id']==source for r in self.store.semantic_search(self.course,vector,'test-model')))
+        self.assertEqual(self.store.embedding_batch(self.course,'test-model')['pending'],1)
+        other=Study(self.root)
+        self.assertEqual(other.embedding_batch(self.course,'test-model')['pending'],1)
+        other.db.close()
+        with self.assertRaises(ValueError):self.store.save_embeddings('test-model',[{'id':source,'fingerprint':key('changed text'),'vectors':[[float('nan')]*384]}])
+
 
 if __name__=='__main__':unittest.main()

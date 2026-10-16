@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {fsrs,createEmptyCard,Rating} from 'ts-fsrs';
 import {Bridge} from './bridge';
 import {Tutor} from './tutor';
+import {Embeddings} from './embeddings';
 
 const directory=path.dirname(fileURLToPath(import.meta.url));
 const project=process.env.STUDIO_PROJECT??path.resolve(directory,'../..');
@@ -13,7 +14,8 @@ const configured=process.env.STUDIO_ROOT;
 const python=process.env.STUDIO_PYTHON??(configured?path.join(configured,'.state/slides-runtime/bin/python'):'python3');
 const bridge=new Bridge(python,project,configured);
 const initial=await bridge.call('bootstrap');
-const tutor=new Tutor(bridge,initial.state_dir);
+const embeddings=new Embeddings(bridge,configured??path.resolve(initial.state_dir,'../..'),project);
+const tutor=new Tutor(bridge,initial.state_dir,embeddings);
 const app=express();
 app.disable('x-powered-by');
 app.use((req,res,next)=>{
@@ -27,14 +29,17 @@ app.use((req,res,next)=>{
 app.use(express.json({limit:'250kb'}));
 const run=(handler:(req:any,res:any)=>Promise<any>)=>(req:any,res:any,next:any)=>{handler(req,res).catch(next);};
 app.get('/api/bootstrap',run(async(_req,res)=>res.json(await bridge.call('bootstrap'))));
-app.post('/api/import',run(async(req,res)=>res.json(await bridge.call('import_course',{course:req.body.course}))));
+app.post('/api/import',run(async(req,res)=>{const result=await bridge.call('import_course',{course:req.body.course});embeddings.index(req.body.course);res.json(result);}));
+app.get('/api/embeddings',(_req,res)=>res.json(Object.fromEntries(embeddings.jobs)));
+app.get('/api/history',run(async(req,res)=>res.json(await bridge.call('list_sessions',{course:req.query.course||null,query:String(req.query.q??''),offset:Number(req.query.offset??0)}))));
 app.post('/api/sessions',run(async(req,res)=>res.json(await bridge.call('open_session',req.body))));
+app.post('/api/sessions/:sid/resume',run(async(req,res)=>res.json(await bridge.call('resume_session',{target:req.params.sid}))));
 app.get('/api/sessions/:sid',run(async(req,res)=>res.json(await bridge.call('view',{sid:req.params.sid}))));
 app.post('/api/sessions/:sid/next',run(async(req,res)=>res.json(await bridge.call('next',{sid:req.params.sid}))));
 app.post('/api/sessions/:sid/recall',run(async(req,res)=>res.json(await bridge.call('recall',{sid:req.params.sid,concept:req.body.concept}))));
 app.post('/api/sessions/:sid/select',run(async(req,res)=>res.json(await bridge.call('select_activity',{sid:req.params.sid,aid:req.body.aid,version:req.body.version}))));
 app.post('/api/sessions/:sid/preferences',run(async(req,res)=>res.json(await bridge.call('preferences',{sid:req.params.sid,goal:req.body.goal,minutes:req.body.minutes}))));
-app.get('/api/sessions/:sid/search',run(async(req,res)=>{const s=await bridge.call('context',{sid:req.params.sid});if(s.session.mode==='exam')throw Error('Ricerca sospesa durante la simulazione.');res.json(await bridge.call('search',{course:s.session.course,query:String(req.query.q??'')}));}));
+app.get('/api/sessions/:sid/search',run(async(req,res)=>{const s=await bridge.call('context',{sid:req.params.sid});if(s.session.mode==='exam')throw Error('Ricerca sospesa durante la simulazione.');res.json(await embeddings.search(s.session.course,String(req.query.q??'')));}));
 async function sourceFor(sid:string,id:string){const context=await bridge.call('context',{sid});const source=await bridge.call('source',{source_id:id,allow_reserved:context.session.mode==='exam',allow_solutions:context.session.mode!=='exam'});if(source.course!==context.session.course)throw Error('Fonte di un altro corso.');if(context.session.mode==='exam'&&!context.activity?.spec.sources.includes(id))throw Error('Fonte non disponibile durante la simulazione.');return source;}
 app.get('/api/sessions/:sid/sources/:id',run(async(req,res)=>{const source=await sourceFor(req.params.sid,req.params.id);res.json(source);}));
 app.get('/api/sessions/:sid/page/:id',run(async(req,res)=>{const source=await sourceFor(req.params.sid,req.params.id);const image=await bridge.call('render_pdf',{source_id:source.id,allow_reserved:!!source.reserved,allow_solutions:!!source.solution});res.sendFile(image.path,{dotfiles:'allow'});}));
@@ -95,5 +100,5 @@ app.use(express.static(path.resolve(directory,'../dist')));
 app.get('/{*splat}',(_req,res)=>res.sendFile(path.resolve(directory,'../dist/index.html')));
 app.use((error:any,_req:any,res:any,_next:any)=>{if(!res.headersSent)res.status(400).json({error:error.message??'Operazione non riuscita.'});});
 const server=app.listen(Number(process.env.STUDIO_PORT??4326),'127.0.0.1',()=>console.log(`Studio disponibile: http://127.0.0.1:${process.env.STUDIO_PORT??4326}`));
-function close(){server.close();bridge.close();process.exit(0);}
+function close(){server.close();embeddings.close();bridge.close();process.exit(0);}
 process.on('SIGINT',close);process.on('SIGTERM',close);

@@ -92,3 +92,18 @@ test('a response never steals composer focus or overwrites the next draft',async
   await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();
   await expect(composer).toHaveValue('La prossima domanda, ancora in bozza.');
 });
+
+
+test('sessions can be searched and resumed and ChatGPT access is visible',async({page})=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'Sessioni',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Le tue sessioni'})).toBeVisible();
+  await page.getByLabel('Cerca nelle sessioni').fill('');
+  await page.getByRole('button',{name:'Cerca sessioni',exact:true}).click();
+  await page.getByRole('button',{name:'Riprendi sessione',exact:true}).first().click();
+  await expect(page.getByLabel('Messaggio al tutor')).toBeVisible();
+  await page.getByRole('button',{name:'◇ Modello e accesso'}).click();
+  await expect(page.getByRole('button',{name:'Collega ChatGPT',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button',{name:'◇ Modello e accesso'})).toBeFocused();
+});

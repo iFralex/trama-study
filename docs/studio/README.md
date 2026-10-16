@@ -8,7 +8,10 @@ Scegli il corso e premi **Riprendi il percorso**. Una sessione precedente conser
 
 - Chat Markdown/LaTeX con attività incorporate e pannello espandibile.
 - Importazione incrementale, basata su SHA-256, di PDF, notebook, trascrizioni e allineamenti. Nessuna esecuzione dei notebook.
-- Ricerca FTS5 con traduzioni mirate italiano/inglese e contesto vicino al passaggio.
+- Ricerca ibrida FTS5 + embeddings multilingue locali ONNX, con contesto e riferimenti a pagina/cella/timestamp. Indicizzazione incrementale e riprendibile.
+- Navigazione dei file, ricerca letterale anche nel codice e lettura di intervalli di righe, senza shell. Sono indicizzati anche HTML, Markdown e file sorgenti testuali.
+- Sezione **Sessioni**: ricerca delle conversazioni e ripresa esatta. Il tutor può consultare sessioni precedenti quando richiesto.
+- Ricerca web e lettura di pagine/PDF primari quando le fonti del corso non bastano, con provenienza distinta.
 - Fonti originali: pagina PDF renderizzata localmente (anche senza plugin PDF), PDF completo, video al timestamp, testo delle celle e qualità delle associazioni.
 - Percorso curato PRAM → riduzione → prefix sum → domanda autentica → variante → richiamo. Per altri argomenti e corsi l'agente cerca le loro fonti e crea attività; non viene riutilizzato automaticamente il percorso PRAM.
 - HTML/CSS/JavaScript isolato, con eventi osservabili. Una manipolazione salva lo stato senza chiamare il modello a ogni cambiamento. Le azioni del laboratorio attendono la conferma del salvataggio prima di mostrare l’avanzamento.
@@ -45,6 +48,24 @@ La verifica di ricerca sui materiali reali usa `tests/retrieval-cases.json` e `n
 
 Il percorso curato e verificato è PRAM/riduzione/scan. Gli altri percorsi sono creati dal modello e i loro giudizi non vengono promossi automaticamente a verifiche certe. Il tempo disponibile orienta il tutor, senza interrompere la sessione alla scadenza. Il corpus non assume che le date del programma di un anno precedente siano la data del prossimo esame.
 
-La ricerca iniziale non usa embedding. I materiali mancanti, le trascrizioni parziali e i collegamenti candidati restano tali. Non è ancora inclusa esecuzione nativa CUDA, scrittura a mano o accesso remoto.
+I materiali mancanti, le trascrizioni parziali e i collegamenti candidati restano tali. Non è ancora inclusa esecuzione nativa CUDA, scrittura a mano o accesso remoto.
 
 Il funzionamento tecnico può essere verificato subito; il miglioramento della preparazione richiede una sessione reale dello studente e una prova differita su problemi nuovi. I test con orologio simulato verificano il criterio temporale, non dimostrano apprendimento.
+
+## Collegare ChatGPT
+
+Apri **Modello e accesso → Collega ChatGPT**, completa l'accesso nel browser e scegli un modello disponibile → **Usa questo modello**. Viene usato l'OAuth del provider `openai` di Pi, con API pubblica OpenAI e flusso Sign in with ChatGPT; non il provider legacy `openai-codex`. L'idoneità e i modelli dipendono dall'account; il collegamento non importa le tue conversazioni ChatGPT. La chiave API resta una modalità separata. [Documentazione ufficiale](https://developers.openai.com/siwc/quickstart).
+
+## Ricerca, memoria e fonti incerte
+
+Il modello locale è `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, FastEmbed 0.7.4, ONNX CPU a due thread, 384 dimensioni. Non serve un'API di embeddings. Ambiente, modello e indice risiedono nel disco dati: `.state/embeddings-runtime`, `.state/embedding-models` e `.state/studio/studio.sqlite3`. Il primo caricamento scarica il modello. Mentre si prepara, rimane disponibile la ricerca testuale. La sezione Fonti mostra lo stato.
+
+I passaggi vengono suddivisi per token con sovrapposizione; gli embeddings conservano il riferimento al passaggio originale. Il risultato cita sempre la pagina o l'intervallo, non una ricostruzione del modello. I batch vengono salvati atomicamente e ricalcolati solo quando cambia il testo o l'identità del modello. I temi riservati non compaiono negli strumenti di ricerca; durante la simulazione anche lo storico è escluso dal tutor.
+
+Gli strumenti `list_materials`, `grep_materials`, `read_material` permettono di elencare file, cercare testo letterale e leggere righe con ID citabili. `search_sessions` e `read_session` recuperano messaggi, attività e tentativi senza cambiare la sessione corrente. La ricerca parte dal corso/anno corrente; si estende ad altri corsi solo su richiesta esplicita. Le sessioni rimangono salvate in SQLite e le conversazioni Pi in `.state/studio/pi`.
+
+Politica concordata: prima confrontare le fonti del corso; usare conoscenza interna dichiarata solo per fatti elementari e stabili; verificare online negli altri casi. Le formulazioni esterne vanno confrontate per variabili, ipotesi, convenzioni e profondità. Se l'equivalenza rimane irrisolta, il tutor deve mostrare il confronto e chiedere chiarimenti prima di continuare quella spiegazione. Questa è un'istruzione al modello, non una garanzia matematica di correttezza: i giudizi aperti rimangono provvisori.
+
+La ricerca web pubblica usa DuckDuckGo con fallback Bing RSS, senza chiavi aggiuntive; può essere limitata dai siti. `read_web_page` legge HTML o PDF, salva URL, momento e testo in `.state/studio/web`, e conserva le verifiche TLS. Limiti: HTTPS pubblico, 3 MB per risposta, 24.000 caratteri, fino a 12 pagine PDF per lettura (parametro `page` per proseguire). Le query devono contenere termini tecnici generici, senza informazioni personali o trascrizioni. In caso di indisponibilità il tutor deve dichiararla. I file originali non vengono corretti né riscritti.
+
+Per ripetere la verifica semantica e ibrida sul corso reale, usa `npm run verify:embeddings` con le stesse variabili della verifica delle fonti. Il rapporto viene scritto in `.state/studio/hybrid-verification.json`.
