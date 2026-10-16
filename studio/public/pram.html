@@ -1,0 +1,22 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><style>
+body{font:15px system-ui;color:#233c38;background:#fafaf7;margin:0;padding:20px}label{display:inline-flex;flex-direction:column;gap:6px;margin:0 14px 14px 0}select,input,button{font:inherit;border:1px solid #bbc6c0;border-radius:8px;background:white;padding:9px}button{cursor:pointer}button.primary{background:#245d50;color:white}.values{display:flex;gap:5px;flex-wrap:wrap}.cell{border:1px solid #c8d4ce;border-radius:7px;padding:12px;min-width:22px;text-align:center;background:#edf3ef}output{display:block;margin:15px 0;line-height:1.6}.note{font-size:13px;color:#5c7067}#error{color:#93412d}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #b38947;outline-offset:2px}</style></head><body>
+<label>Valori (separati da virgole)<input id="values" data-key="values" value="1,2,3,4,5,6,7,8" aria-label="Valori dell’array"></label>
+<label>Processori<select id="processors" data-key="processors"><option>1</option><option>2</option><option selected>4</option><option>8</option><option>16</option></select></label>
+<label>Algoritmo<select id="algorithm" data-key="algorithm"><option value="reduction">Riduzione</option><option value="scan">Prefix sum inclusivo</option></select></label>
+<label>Modello<select id="model" data-key="model"><option>EREW</option><option selected>CREW</option><option>CRCW</option></select></label>
+<p class="note">Una somma per processore e per passo. Barriera tra livelli. Copie, comunicazione e scambio buffer non conteggiati. Nessuna misura di CPU/GPU.</p>
+<div class="values" id="array" aria-label="Array corrente"></div><output id="summary" aria-live="polite"></output><p id="error" role="alert"></p>
+<button id="step" class="primary">Avanza di un livello</button> <button id="reset">Ricomincia</button>
+<p class="note">Per lo scan standard i processori leggono dal buffer precedente e scrivono su un buffer distinto. CREW è sufficiente; con EREW e più processori serve una pianificazione diversa, non implementata qui.</p>
+<script>
+const $=id=>document.getElementById(id);let level=0;
+function calculate(){const a=$('values').value.split(',').map(v=>Number(v.trim())),p=Number($('processors').value),scan=$('algorithm').value==='scan';if(!a.length||a.length>32||!a.every(Number.isFinite))throw Error('Inserisci da 1 a 32 numeri validi.');const levels=[];let current=a,work=0,time=0;
+if(scan){for(let d=1;d<a.length;d*=2){const old=current;current=old.map((v,i)=>i>=d?v+old[i-d]:v);const n=a.length-d;work+=n;time+=Math.ceil(n/p);levels.push({array:current,work,time});}}
+else{while(current.length>1){const next=[];const n=Math.floor(current.length/2);for(let i=0;i<current.length;i+=2)next.push(i+1<current.length?current[i]+current[i+1]:current[i]);work+=n;time+=Math.ceil(n/p);current=next;levels.push({array:current,work,time});}}
+return {a,levels,supported:!scan||$('model').value!=='EREW'||p===1||a.length<=2};}
+function render(){try{const data=calculate();level=Math.min(level,data.levels.length);const stage=level?data.levels[level-1]:{array:data.a,work:0,time:0};$('array').replaceChildren(...stage.array.map(v=>{const e=document.createElement('span');e.className='cell';e.textContent=v;return e;}));$('summary').textContent='Livello '+level+'/'+data.levels.length+' · somme eseguite: '+stage.work+' · passi ideali: '+stage.time;$('error').textContent=data.supported?'':'Questo schedule di scan non è valido per EREW: scegli CREW/CRCW o un solo processore.';$('step').disabled=!data.supported||level>=data.levels.length;}catch(e){$('error').textContent=e.message;$('step').disabled=true;}}
+for(const id of ['values','processors','algorithm','model'])$(id).addEventListener('input',()=>{level=0;render();window.study?.emit('change',{level:0,values:$('values').value,processors:$('processors').value,algorithm:$('algorithm').value,model:$('model').value});});
+$('step').onclick=async()=>{const next=level+1;$('step').disabled=true;try{await window.study?.emit('try',{level:next,values:$('values').value,processors:$('processors').value,algorithm:$('algorithm').value,model:$('model').value});level=next;render();}catch(error){$('error').textContent=error.message;$('step').disabled=false;}};
+$('reset').onclick=()=>{level=0;render();window.study?.emit('change',{level});};
+window.addEventListener('study:restore',e=>{const s=e.detail;for(const id of ['values','processors','algorithm','model'])if(s[id]!=null)$(id).value=s[id];level=Number(s.level||0);render();});render();
+</script></body></html>

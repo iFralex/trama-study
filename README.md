@@ -324,3 +324,7 @@ Comandi diretti:
 
 --engine consente di specificare whisper-cli; --chunk-seconds cambia la durata dei
 blocchi (predefinita 300). Non cancellare sessioni/ se vuoi mantenere la ripresa.
+
+## Studio interattivo
+
+Apri **Studio.command** oppure scegli **5) Apri Studio** da Avvia.command. Tutor Pi, attività HTML nella chat, laboratorio PRAM, fonti e ripassi. Configura il provider in **Modello e accesso**. [Guida e limiti](docs/studio/README.md).

@@ -1,0 +1,10 @@
+[
+  {"query":"differenza EREW CREW","documents":["lecture2-PRAM.pdf"]},
+  {"query":"somma CREW PRAM","documents":["lecture2-PRAM.pdf"]},
+  {"query":"prefix sum","documents":["lecture2-PRAM.pdf"]},
+  {"query":"legge Amdahl","documents":["lecture2-PRAM.pdf","exercise_session-1.pdf"]},
+  {"query":"divergenza SIMD","documents":["exercise_session-2.pdf","lecture-3_basicarch.pdf"]},
+  {"query":"accessi coalescenti memoria GPU","documents":["lecture-5_gpuarch_2nd.pdf"]},
+  {"query":"consistenza memoria","documents":["lecture-6_consistency.pdf"]},
+  {"query":"OpenMP","documents":["OpenMP.ipynb","7.75-Posix Threads and OpenMP.pdf"]}
+]
