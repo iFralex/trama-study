@@ -33,3 +33,12 @@ I tentativi automatici nel browser usano un archivio fittizio separato. Non veng
 - Ricerca ibrida: 11/11 casi annotati con documento atteso nei primi dieci risultati, inclusi 3 casi di parafrasi; rapporto `.state/studio/hybrid-verification.json`. È una verifica limitata di recupero, non dell'accuratezza del tutor.
 - Ricerca web pubblica provata dal vivo; PDF universitario di Washington estratto con URL, pagine e momento di consultazione. Le verifiche TLS restano attive: una fonte con certificato non valido restituisce un errore.
 - L'accesso OAuth personale e il comportamento di un modello commerciale richiedono ancora il login dell'utente. Le regole su conoscenza generale, confronto delle formule e chiarimenti sono istruzioni esplicite, non un rilevatore infallibile di errori.
+
+
+## Percorso dalle basi — 16 ottobre 2026
+
+- 22 test Python del tutor e del percorso passati: piano ancorato alla lezione, assenza di quiz iniziale, ordine dei materiali, OCR candidato, cursori per lezione/argomento, richiamo con ritorno al punto precedente e persistenza.
+- 9 test TypeScript/Pi passati. Il nuovo test usa il vero bridge Python e SDK Pi con provider simulato per leggere lezione e fonte, salvare il piano e creare una spiegazione per principianti.
+- 5 percorsi Playwright passati, compreso avvio dalle basi, provider assente, richiesta conservata, ricaricamento, ripresa e programma delle lezioni.
+- Catalogo reale verificato in memoria: 14 lezioni in ordine, dal 16 settembre al 4 novembre 2025; 12 con trascrizione indicizzata e 2 con soli OCR/associazioni, segnalate. Prima lezione: 26 passaggi e 7 pagine PDF associate. Nessuna sessione fittizia aggiunta al catalogo personale.
+- I contenuti del tutor commerciale richiedono una verifica didattica reale: questi test verificano contratto, fonti, salvataggi e UX, non certificano correttezza o apprendimento.

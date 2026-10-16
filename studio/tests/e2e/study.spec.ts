@@ -107,3 +107,16 @@ test('sessions can be searched and resumed and ChatGPT access is visible',async(
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button',{name:'◇ Modello e accesso'})).toBeFocused();
 });
+
+test('beginner mode starts from course sources and resumes its lesson phase after provider failure',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'Parti dalle basi',exact:true}).click();
+  const path=page.getByRole('region',{name:'Percorso dalle basi'});
+  await expect(path).toBeVisible();await expect(page.getByRole('heading',{name:'Prima di iniziare'})).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
+  await expect(page.locator('.message.user')).toContainText('Parti da zero');
+  await expect(path.getByLabel('Lezione',{exact:true})).toBeVisible();
+  await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();
+  await expect(path).toBeVisible();await expect(page.locator('.message.user')).toContainText('Parti da zero');
+  await page.getByRole('button',{name:'Programma',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Studia questa lezione →'}).first()).toBeVisible();
+});

@@ -73,3 +73,7 @@ Per ripetere la verifica semantica e ibrida sul corso reale, usa `npm run verify
 ## Tema chiaro e scuro
 
 Il pulsante **Tema scuro / Tema chiaro** in alto a destra cambia il tema senza interrompere le attività. La preferenza viene ricordata nel browser; al primo accesso si segue il tema del sistema. Chat, formule, pannelli e attività HTML condividono il tema. I PDF conservano i colori originali.
+
+## Partire dalle basi
+
+**Parti dalle basi** avvia un percorso ordinato sulle lezioni del corso, con prerequisiti, spiegazioni, esempi svolti e prove guidate/autonome. Argomenti e attività sono ancorati alle fonti; lezione, argomento e fase rimangono salvati. [Guida e limiti del percorso](DALLE_BASI.md).

@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from .config import data_root, load_config
+from .study_beginner import BeginnerStudy
 
 
 def now():
@@ -49,7 +50,7 @@ TRANSLATIONS={'riduzione':'reduction','parallela':'parallel','parallelo':'parall
  'somma':'sum','modelli':'models','accessi':'access'}
 
 
-class Study:
+class Study(BeginnerStudy):
     def __init__(self, root, database=None):
         self.root = Path(root).resolve()
         if not self.root.is_dir():
@@ -81,6 +82,7 @@ class Study:
           CREATE INDEX IF NOT EXISTS events_activity ON events(activity,version);
         ''')
         self.db.commit()
+        self.setup_beginner()
 
     def courses(self):
         base = self.root / 'corsi'
@@ -313,17 +315,27 @@ class Study:
             self.db.execute('UPDATE sessions SET updated=? WHERE id=?',(now(),session))
         return mid
 
-    def open_session(self, course, goal='Capire e saper risolvere', minutes=25, mode='learn', fresh=False):
+    def open_session(self, course, goal='Capire e saper risolvere', minutes=25, mode='learn', fresh=False, approach='standard'):
         self.course_path(course)
         if mode not in ('learn','exam'):
             raise ValueError('Modalità non valida.')
+        if approach not in ('standard','beginner') or (mode=='exam' and approach=='beginner'):
+            raise ValueError('Modalità di apprendimento non valida.')
+        lessons=self.course_lessons(course) if approach=='beginner' else []
+        if approach=='beginner' and not lessons:raise ValueError('Importa prima almeno una trascrizione o un materiale didattico del corso.')
         self.setting('last_course',course)
         row = None if fresh else self.db.execute('SELECT id FROM sessions WHERE course=? AND mode=? ORDER BY updated DESC LIMIT 1',(course,mode)).fetchone()
+        if row and approach=='beginner':
+            row=self.db.execute('SELECT s.id FROM sessions s JOIN beginner_sessions b ON b.session=s.id WHERE s.course=? ORDER BY s.updated DESC LIMIT 1',(course,)).fetchone()
         if row:
             return self.view(row['id'])
         sid=uid()
         with self.db:
             self.db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,?)',(sid,course,str(goal)[:200],max(5,min(int(minutes),180)),0,mode,None,now(),now()))
+        if approach=='beginner':
+            with self.db:self.db.execute('INSERT INTO beginner_sessions VALUES(?,?)',(sid,lessons[0]['id']))
+            self.message(sid,'assistant','Partiamo dalle tue lezioni, senza dare per scontati i prerequisiti. Ogni argomento avrà spiegazioni, esempi e prove collegate alle fonti. Puoi scegliere un’altra lezione o chiedere di rallentare.')
+            return self.view(sid)
         self.message(sid,'assistant','Partiamo da una prova breve. Puoi chiedere una spiegazione o cambiare argomento in qualsiasi momento.' if mode=='learn' else 'Simulazione autonoma: rispondi senza aiuti. La correzione sarà disponibile alla consegna.')
         self.seed(sid)
         return self.view(sid)
@@ -332,6 +344,12 @@ class Study:
         session=self.session(sid)
         if session['mode']=='exam':
             raise ValueError('Durante la simulazione non si aggiungono attività generate.')
+        learning=self.beginner_context(sid)
+        if learning:
+            if not learning['current_unit']:raise ValueError('Prepara prima un piano fondato sulle fonti della lezione con set_lesson_plan.')
+            refs=spec.get('sources',[])
+            if not set(refs)&set(learning['current_unit']['sources']):raise ValueError('L’attività deve citare almeno una fonte dell’argomento corrente.')
+            spec=dict(spec,concept=learning['current_unit']['id'],beginner={'lesson':learning['lesson']['id'],'unit':learning['unit_index'],'phase':learning['phase']})
         return self._activity(sid,dict(spec,grading_origin='generated'),activity_id)
 
     def _activity(self,sid,spec,activity_id=None):
@@ -392,6 +410,7 @@ class Study:
         self._activity(sid,spec)
 
     def next(self,sid):
+        if self.beginner_context(sid):return self.advance_beginner(sid)
         session=self.session(sid)
         if session['mode']=='exam':
             raise ValueError('Consegna la simulazione prima di continuare.')
@@ -442,7 +461,7 @@ class Study:
             activities.append({'id':r['id'],'version':r['version'],'spec':public,'state':json.loads(r['state']),'created':r['created']})
         messages=[dict(r) for r in self.db.execute('SELECT * FROM messages WHERE session=? ORDER BY rowid',(sid,))]
         attempts=[dict(r,answer=json.loads(r['answer']),grade=json.loads(r['grade'])) for r in self.db.execute('SELECT * FROM attempts WHERE session=? ORDER BY rowid',(sid,))]
-        return {'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])}
+        return {'learning':self.beginner_context(sid),'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])}
 
     def activity(self,sid,aid,version):
         row=self.db.execute('SELECT * FROM activities WHERE id=? AND version=? AND session=?',(aid,int(version),sid)).fetchone()
@@ -578,7 +597,7 @@ class Study:
         view=self.view(sid)
         s=view['session']
         events=[dict(r,payload=json.loads(r['payload'])) for r in self.db.execute('SELECT kind,payload,activity,version,created FROM events WHERE session=? ORDER BY rowid DESC LIMIT 40',(sid,))]
-        return {'session':s,'progress':view['progress'],'recommendation':view['recommendation'],'activity':next((a for a in reversed(view['activities']) if a['id']==s['current'] and (not s.get('current_version') or a['version']==s['current_version'])),None),'attempts':view['attempts'][-12:],'interactions':events}
+        return {'learning':self.beginner_context(sid),'session':s,'progress':view['progress'],'recommendation':view['recommendation'],'activity':next((a for a in reversed(view['activities']) if a['id']==s['current'] and (not s.get('current_version') or a['version']==s['current_version'])),None),'attempts':view['attempts'][-12:],'interactions':events}
 
     def recommendation(self,course):
         progress=self.progress(course)
@@ -743,7 +762,7 @@ class Study:
         return [dict(self.source(source),semantic_score=score) for source,score in sorted(best.items(),key=lambda x:x[1],reverse=True)[:max(1,min(int(limit),30))]]
 
     def dispatch(self,method,args):
-        allowed={'installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
+        allowed={'select_beginner_unit','course_lessons','lesson_bundle','beginner_context','set_lesson_plan','select_lesson','advance_beginner','beginner_recall','installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
         if method not in allowed:
             raise ValueError('Metodo non disponibile.')
         return getattr(self,method)(**args)

@@ -38,3 +38,7 @@ Un processo Python ONNX separato calcola vettori senza accesso al database. Node
 `GET /api/history` cerca le sessioni del corso; `POST /api/sessions/:sid/resume` ricorda la sessione selezionata. Gli strumenti di memoria leggono gli snapshot esistenti, non modificano il cursore di studio. Lo storico non entra automaticamente nel contesto del modello e le richieste del tutor sono bloccate nella simulazione.
 
 Le letture web usano DNS verificato con IP fissato per la connessione, controllo dei redirect, TLS e limiti di dimensione/tempo. Il PDF viene estratto dal processo Python. Il testo esterno è dato non fidato e rimane separato dalle fonti del corso. Le regole epistemiche sono nel prompt del tutor; non si attribuisce al modello una misura di certezza assoluta.
+
+## Percorsi dalle basi
+
+`study_beginner.py` gestisce l’ordine delle lezioni, i piani ancorati alle fonti, i cursori per lezione/argomento e i richiami provvisori. `beginner_sessions`, `lesson_plans`, `beginner_unit_positions`, `beginner_recalls` e `beginner_returns` condividono l’unico proprietario SQLite con lo studio esistente. I cambi di fase non assegnano valutazioni. Le attività generate conservano lezione, argomento e fase nella propria specifica. Il tutor riceve un pacchetto di fonti della lezione e strumenti per leggere i passaggi e salvare il piano. Le API `beginner/{lesson,unit,advance,recall}` sono azioni esplicite dell’interfaccia; l’avanzamento del tutor è previsto solo su richiesta. [Contratto didattico e limiti](DALLE_BASI.md).

@@ -50,7 +50,7 @@ test('actual Pi SDK streams, calls study tools, sees interactions and assesses s
     let output='';await tutor.chat('study','Recupera la sessione previous, cerca threadIdx nel codice, spiega e fammi provare.',delta=>output+=delta);
     assert.match(output,/PRAM/);assert.ok(calls.some(c=>c.method==='search'));assert.ok(calls.some(c=>c.method==='create_activity'));assert.ok(calls.some(c=>c.method==='read_session'));assert.ok(calls.some(c=>c.method==='grep_materials'));
     const contextText=JSON.stringify(requests[0].messages);assert.match(contextText,/processors/);
-    assert.deepEqual(requests[0].tools.map((t:any)=>t.function.name).sort(),['create_activity','get_context','grep_materials','list_materials','read_material','read_session','read_source','read_web_page','search_sessions','search_sources','web_search']);
+    assert.deepEqual(requests[0].tools.map((t:any)=>t.function.name).sort(),['advance_lesson_step','create_activity','get_context','grep_materials','list_materials','read_lesson','read_material','read_session','read_source','read_web_page','search_sessions','search_sources','select_study_lesson','select_study_topic','set_lesson_plan','web_search']);
     assert.ok(messages.some(m=>m.role==='user'));assert.ok(messages.some(m=>m.role==='assistant'));
     const grade=await tutor.assess('study','attempt1');assert.equal(grade.status,'provisional');assert.equal(requests.at(-1).tools?.length??0,0);
     const before=requests.length;context.session.mode='exam';await assert.rejects(()=>tutor.chat('study','Give answers',()=>{}),/simulazione/);assert.equal(requests.length,before);
