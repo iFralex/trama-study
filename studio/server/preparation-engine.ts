@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {preparationRoute,expertCheckReason,sumUsage,type ModelRef} from './model-routing';
 import {estimateTokens} from '@earendil-works/pi-coding-agent';
+import {selectionPacket,validateDecisions,exclusionReview,mergeExclusions} from './selection';
 import type {Bridge} from './bridge';
 import type {Tutor} from './tutor';
 
@@ -49,16 +50,16 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
         route={model:{provider:policy.provider,id:policy.expert},worker:false,reason:'Lettore non disponibile: uso il modello di verifica.'};
         budget=await tutor.preparationBudget(route.model);
       }
-      const key=budget.key+(policy?'|'+policy.version+':expert='+policy.provider+':'+policy.expert:'');
+      const key=budget.key+(policy?'|'+policy.version+':expert='+policy.provider+':'+policy.expert:'')+(peek.kind==='selection'?'|selection=2':'');
       const task=await bridge.call('course_task',{path,input_tokens:budget.input,model_key:key});
-      await bridge.call('preparation_begin',{path,task});
+      const checkpoint=await bridge.call('preparation_begin',{path,task});
       if(task.kind==='publish'){
         const saved=await bridge.call('preparation_commit',{path,task,result:{}});
         if(!saved.position?.chapter&&saved.chapters.some((c:any)=>c.id===task.chapter.id&&c.ready))await bridge.call('course_select',{sid:saved.sid,chapter:task.chapter.id});
         continue;
       }
-      const role=task.kind==='scope'?'scope':task.kind.startsWith('review_')||task.kind==='map_review'?task.kind:task.kind==='chapter'||task.kind==='repair_chapter'?'author':'preparation';
-      const calls:any[]=[];let session:any,active:ModelRef=route.model,worker=route.worker,output='',corrected=false,repairUsed=false,escalation:string|undefined;
+      const role=task.kind==='selection'?'selection':task.kind==='scope'?'scope':task.kind.startsWith('review_')||task.kind==='map_review'?task.kind:task.kind==='chapter'||task.kind==='repair_chapter'?'author':'preparation';
+      const calls:any[]=[];let session:any,active:ModelRef=route.model,worker=route.worker,output='',corrected=false,repairUsed=false,escalation:string|undefined,selectionCandidate:any,selectionReview:any;
       const began=Date.now();
       const routing=()=>({version:policy?.version??'single',primary:route.model,active,reason:route.reason,escalation_reason:escalation});
       const metric=async(state:string,error?:string)=>bridge.call('preparation_metric',{path,task:task.task_id,state,error,metrics:{elapsed_ms:Date.now()-began,routing:routing()}});
@@ -88,10 +89,17 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
           await bridge.call('preparation_model_call',{path,task:task.task_id,call:randomUUID(),model:active,role,data:record});
         }
       };
-      const prompt=(candidate?:string,reason?:string)=>preparationInstructions(task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
+      const prompt=(candidate?:string,reason?:string)=>task.kind==='selection'?'Compito (dati):\n'+JSON.stringify(selectionPacket(task)):preparationInstructions(task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
       const timer=setTimeout(()=>void session?.abort(),600000);
       try{
         let next=prompt();
+        if(worker&&task.kind==='selection'&&checkpoint.metrics?.selection_checkpoint){
+          selectionCandidate=validateDecisions(task,checkpoint.metrics.selection_checkpoint.candidate);
+          selectionReview=exclusionReview(task,selectionCandidate);
+          if(!selectionReview)throw Error('Checkpoint selezione incoerente: manca la verifica residua.');
+          await switchToExpert('Riprendo la verifica delle esclusioni dal checkpoint, senza ripetere Luna.');
+          next='Compito (dati):\n'+JSON.stringify(selectionReview);
+        }
         for(;;){
           for(let transport=0;;transport++){
             await metric(escalation?'correcting':'waiting');
@@ -108,15 +116,22 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
           }
           if(job.paused)break;
           try{
-            const result=JSON.parse(output.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));
-            const concern=worker?expertCheckReason(task.kind,result):null;
+            let result=JSON.parse(output.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));
+            if(task.kind==='selection'){
+              validateDecisions(selectionReview??task,result);
+              if(worker){
+                selectionCandidate=result;selectionReview=exclusionReview(task,result);
+                if(selectionReview){await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{selection_checkpoint:{candidate:selectionCandidate}}});await switchToExpert('Verifica mirata delle sole esclusioni; il lavoro valido del lettore è conservato.');next='Compito (dati):\n'+JSON.stringify(selectionReview);continue;}
+              }else if(selectionReview)result=mergeExclusions(task,selectionCandidate,result);
+            }
+            const concern=worker&&task.kind!=='selection'?expertCheckReason(task.kind,result):null;
             if(concern){const candidate=output;await switchToExpert(concern);next=prompt(candidate,concern);continue;}
             await bridge.call('preparation_commit',{path,task,result});break;
           }catch(error:any){
             await bridge.call('preparation_reject',{path,task:task.task_id,error:error.message,output});
             if(job.paused)throw error;
             corrected=true;
-            if(worker&&policy){const candidate=output;await switchToExpert('Risultato del lettore rifiutato: '+error.message);next=prompt(candidate,error.message);continue;}
+            if(worker&&policy){selectionCandidate=undefined;selectionReview=undefined;const candidate=output;await switchToExpert('Risultato del lettore rifiutato: '+error.message);next=prompt(candidate,error.message);continue;}
             if(repairUsed)throw error;repairUsed=true;
             await metric('correcting',error.message);
             next='Il risultato è stato rifiutato e non salvato. Correggi UNA volta e restituisci il JSON completo. Non inventare evidenze per superare il controllo. Errore: '+error.message+'\nSe serve una fonte, leggila prima tramite gli strumenti.';
@@ -128,7 +143,7 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
         if(!job.paused)throw error;
       }finally{
         clearTimeout(timer);session?.dispose();job.session=undefined;
-        await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{elapsed_ms:Date.now()-began,usage:sumUsage(calls),corrected,routing:routing()}});
+        await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{elapsed_ms:Date.now()-began,usage:sumUsage([...(checkpoint.metrics?.usage?[{usage:checkpoint.metrics.usage}]:[]),...calls]),corrected,routing:routing()}});
       }
     }
   }finally{if(tutor.preparationOwner===path)tutor.preparationOwner=undefined;}

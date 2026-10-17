@@ -21,19 +21,20 @@ test('budgets preserve response/tool space and cap default source input',()=>{
   assert.match(preparationInstructions('review_discipline'),/checked_blocks/);
 });
 
-async function selectivePipeline(hybrid=false,quota=false){
+async function selectivePipeline(hybrid=false,quota=false,resumeExpert=false){
   const root=await mkdtemp(path.join(os.tmpdir(),'studio-selective-')),project=path.resolve(import.meta.dirname,'../..');
   execFileSync(python,['-c',`import sys,pymupdf
 from pathlib import Path
 p=Path(sys.argv[1])/'corsi'/'general-course-2026'/'materiali';p.mkdir(parents=True)
 for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM uses processors and shared memory. EREW forbids concurrent reads and writes.'),('exam-training.pdf','Exercise 1. Explain the difference between EREW and CREW. Motivate your answer.'),('exam-heldout.pdf','HOLDOUT_SECRET: explain a fresh algorithm.'),('exam-heldout.sol.pdf','HOLDOUT_SOLUTION_SECRET')]:
  d=pymupdf.open();pg=d.new_page();pg.insert_text((30,40),text);d.save(p/name);d.close()`,root]);
-  const bridge=new Bridge(python,project,root);const payloads:any[]=[],phases:string[]=[],trace:{kind:string,model:string}[]=[];let source='',failedOnce=false,rejectedQuestionOnce=false,currentTask:any;
+  const bridge=new Bridge(python,project,root);const payloads:any[]=[],phases:string[]=[],trace:{kind:string,model:string}[]=[];let source='',failedOnce=false,rejectedQuestionOnce=false,currentTask:any,failedExclusionOnce=false;
   const server=createServer(async(req,res)=>{
     let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);payloads.push(body);
     const message=[...body.messages].reverse().find((m:any)=>m.role==='user');const text=typeof message.content==='string'?message.content:message.content.map((p:any)=>p.text??'').join('');
     const task=text.includes('Compito (dati):\n')?JSON.parse(text.split('Compito (dati):\n').at(-1)):currentTask;currentTask=task;phases.push(task.kind);trace.push({kind:task.kind,model:body.model});let output:any;
     if(quota&&body.model==='reader'){res.statusCode=400;res.end(JSON.stringify({error:{message:'The ChatGPT user has reached their Subscription Sharing usage limit.',type:'insufficient_quota',code:'quota_exceeded'}}));return;}
+    if(resumeExpert&&task.kind==='selection'&&body.model==='test'&&!failedExclusionOnce){failedExclusionOnce=true;res.statusCode=400;res.end(JSON.stringify({error:{message:'Expert interrupted for checkpoint test'}}));return;}
     if(task.kind==='scope')output={summary:'Primo parziale: PRAM',included:['PRAM'],excluded:['Secondo parziale'],clarification:null};
     if(task.kind==='selection')output={decisions:task.previews.map((p:any)=>({source:p.id,status:'relevant',reason:'Contiene PRAM',skills:['PRAM']}))};
     if(['exam_reading','evidence_reading'].includes(task.kind)){
@@ -66,7 +67,14 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     engine=new CourseEngine(bridge,tutor);const p=await bridge.call('course_create',{course,request:'Primo parziale: PRAM',reserved:[held]});
     await engine.start(p.id);await idle(engine,p.id);assert.equal((await bridge.call('course_path_view',{path:p.id})).status,'confirm');
     await bridge.call('course_confirm',{path:p.id});await engine.start(p.id);await idle(engine,p.id);
-    if(quota){const stopped=await bridge.call('course_path_view',{path:p.id});assert.equal(stopped.status,'error');assert.match(stopped.error,/Subscription Sharing/);assert.equal(trace.filter(t=>t.kind==='exam_reading').length,1);assert.equal(trace.find(t=>t.kind==='exam_reading')?.model,'reader');assert.equal(stopped.profile.total,0);return;}
+    if(quota){const stopped=await bridge.call('course_path_view',{path:p.id});assert.equal(stopped.status,'error');assert.match(stopped.error,/Subscription Sharing/);assert.equal(trace.filter(t=>t.kind==='selection').length,1);assert.equal(trace.find(t=>t.kind==='selection')?.model,'reader');assert.equal(stopped.profile.total,1);return;}
+    if(resumeExpert){
+      const interrupted=await bridge.call('course_path_view',{path:p.id});assert.equal(interrupted.status,'error');assert.match(interrupted.error,/Expert interrupted/);
+      assert.equal(trace.filter(t=>t.kind==='selection'&&t.model==='reader').length,1);
+      await engine.start(p.id);await idle(engine,p.id);
+      assert.equal(trace.filter(t=>t.kind==='selection'&&t.model==='reader').length,1,'The completed worker result must survive an expert interruption');
+      assert.equal(trace.filter(t=>t.kind==='selection'&&t.model==='test').length,2);
+    }
     const ready=await bridge.call('course_path_view',{path:p.id});assert.equal(ready.status,'ready',ready.error);
     assert.equal(ready.profile.total,1);assert.equal(ready.chapters[0].review.status,'reviewed');assert.equal(ready.current.content.blocks.length,3);
     assert.ok(phases.indexOf('exam_reading')<phases.indexOf('selection'));assert.ok(phases.indexOf('review_solve')<phases.indexOf('review_discipline'));assert.ok(phases.indexOf('review_discipline')<phases.indexOf('review_didactic'));
@@ -78,7 +86,9 @@ c=sqlite3.connect(sys.argv[1]);print(json.dumps(c.execute('SELECT error,output F
     assert.ok(Object.keys(ready.preparation.task_counts).includes('done'));assert.equal(tutor.preparationOwner,undefined);
     if(hybrid){
       for(const kind of ['scope','map','map_review','chapter','review_solve','review_discipline','review_didactic'])assert.ok(trace.filter(t=>t.kind===kind).every(t=>t.model==='test'));
-      for(const kind of ['selection','exam_reading','evidence_reading']){assert.ok(trace.some(t=>t.kind===kind&&t.model==='reader'));assert.ok(trace.some(t=>t.kind===kind&&t.model==='test'));}
+      for(const kind of ['selection']){assert.ok(trace.some(t=>t.kind===kind&&t.model==='reader'));assert.ok(trace.some(t=>t.kind===kind&&t.model==='test'));}
+      for(const kind of ['exam_reading','evidence_reading'])assert.ok(trace.filter(t=>t.kind===kind).every(t=>t.model==='test'));
+      const selectionPayload=payloads.find(p=>p.model==='reader');assert.ok(!selectionPayload.tools?.length);assert.doesNotMatch(JSON.stringify(selectionPayload),/create_activity|LONG_EXAM_TEXT/);
       await bridge.call('setting',{name:'model',value:{provider:'selective-test',id:'reader'}});
       for(const [assessor,role] of [[true,'assessor'],[false,'recall'],[false,'tutor']] as const){const expertSession=await tutor.create(ready.sid,assessor,role);assert.equal(expertSession.model?.id,'test');expertSession.dispose();}
       await bridge.call('setting',{name:'model',value:{provider:'selective-test',id:'test'}});
@@ -91,5 +101,7 @@ c=sqlite3.connect(sys.argv[1]);print(json.dumps(c.execute('SELECT model,data FRO
 }
 
 test('actual Pi selective pipeline reads exams first and publishes only after both full reviews',{skip:!existsSync(python)},()=>selectivePipeline());
-test('hybrid Pi routes bulk work to reader and transfers exclusions, ambiguity and rejected quotes to expert',{skip:!existsSync(python)},()=>selectivePipeline(true));
+test('hybrid Pi uses bounded reader selection, targeted expert exclusions and expert technical reading',{skip:!existsSync(python)},()=>selectivePipeline(true));
 test('shared subscription quota stops hybrid preparation without trying to bypass it with another model',{skip:!existsSync(python)},()=>selectivePipeline(true,true));
+
+test('expert interruption resumes the saved worker selection without paying for Luna twice',{skip:!existsSync(python)},()=>selectivePipeline(true,false,true));

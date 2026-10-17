@@ -142,3 +142,8 @@ Verifiche: 77 test Python, 25 test TypeScript/Pi, build/typecheck e cinque fluss
 Backup SQLite locale creato prima dell’attivazione del codice. I 184 quesiti reali e i checkpoint rimangono conservati. La ripresa reale con Luna è temporaneamente sospesa: la revisione automatica ha richiesto una conferma esplicita dell’invio delle fonti non riservate a Luna, oltre alla richiesta di assegnazione dei compiti. Nessun payload del corso è stato inviato dai due comandi bloccati. I test di questo incremento usano provider simulati e fixture separate.
 
 Attivazione successiva: ricevuta conferma esplicita «Sì, autorizzo l’invio a Luna e la ripresa» per trascrizioni, slide e materiali non riservati. La politica `hybrid-1` è stata salvata come attiva e la preparazione è stata ripresa dal checkpoint. Restano conservati i 184 quesiti; nessuna rielaborazione dei temi già completati è necessaria.
+
+
+### Selezione circoscritta e confronto dei costi (17 ottobre 2026)
+
+Politica `hybrid-2`: Luna solo per selezione, Sol per letture tecniche e revisioni. Confronto reale e limiti in [CONFRONTO_MODELLI.md](CONFRONTO_MODELLI.md). Verificati 78 test Python dello studio, 32 test TypeScript/Pi e cinque test Playwright della preparazione; typecheck e build completati. I test aggiunti controllano ID mancanti/duplicati/estranei, fusione limitata alle esclusioni, conservazione delle fonti incerte e recupero della verifica esperta senza richiamare Luna. Le prove HTTP/Pi sintetiche verificano anche riserve, errori del provider e arresto sui limiti condivisi. Nessuna chiamata reale al provider nei test automatici di regressione; i confronti reali sono separati e i loro rapporti rimangono nella cartella dati.

@@ -329,7 +329,7 @@ class PreparationStudy:
                 stop=cursor+(boundary if boundary>0 else maximum)
             else:stop=len(full)
             piece={k:source[k] for k in ('id','document','page','start','end','kind','title','quality')}
-            piece.update(text=full[cursor:stop],start_char=cursor,end_char=stop,total_characters=len(full),boundary_context={'before':full[max(0,cursor-250):cursor],'after':full[stop:stop+250]})
+            piece.update(selection_status=row['status'],text=full[cursor:stop],start_char=cursor,end_char=stop,total_characters=len(full),boundary_context={'before':full[max(0,cursor-250):cursor],'after':full[stop:stop+250]})
             selected.append(piece);used+=math.ceil(len(piece['text'])/3)
             if stop<len(full):break
         return selected
@@ -377,11 +377,17 @@ class PreparationStudy:
         if undecided:
             doc=self.source(undecided[0]['source'])['document'];group=[r for r in undecided if self.source(r['source'])['document']==doc]
             previews=[]
-            for row in group[:80]:
+            # Bounded triage reads complete natural passages where possible, not 80 tiny excerpts.
+            # A long page is explicitly truncated and must remain uncertain if context is missing.
+            for row in group[:12]:
                 source=self.source(row['source'],allow_solutions=False)
-                previews.append({k:source[k] for k in ('id','page','start','end','kind','quality')}|{'preview':source['text'][:650]+('\n…\n'+source['text'][-200:] if len(source['text'])>850 else '')})
-                if len(pack(previews))>budget*2:previews.pop();break
-            return self._prep_task(path,dict(common,kind='selection',document=doc,title=self.source(group[0]['source'])['title'],previews=previews,exam_profile=self.course_exam_profile(path)))
+                text=source['text'];maximum=max(3000,min(12000,budget*2))
+                previews.append({k:source[k] for k in ('id','page','start','end','kind','quality')}|{'preview':text[:maximum],'truncated':len(text)>maximum})
+                if len(pack(previews))>budget*2 and len(previews)>1:previews.pop();break
+            profile=self.course_exam_profile(path)
+            profile={key:profile[key] for key in ('total','excluded_total','formats','skills','sample_size','limitations')}
+            history=dict(self.db.execute('SELECT s.status,count(*) FROM prep_spans s JOIN passages p ON p.id=s.source WHERE s.path=? AND p.document=? AND s.selected=1 GROUP BY s.status',(path,doc)).fetchall())
+            return self._prep_task(path,dict(common,kind='selection',document=doc,title=self.source(group[0]['source'])['title'],previews=previews,exam_profile=profile,selection_history={'reviewed':sum(history.values()),'outside':history.get('outside',0)}))
         if rows:
             doc=self.source(rows[0]['source'])['document'];group=[r for r in rows if self.source(r['source'])['document']==doc]
             sources=self._prep_available(path,group,budget)
@@ -447,7 +453,7 @@ class PreparationStudy:
 
     def preparation_begin(self,path,task):
         p=self._path(path)
-        row=self.db.execute('SELECT input,state FROM prep_tasks WHERE id=? AND path=?',(task['task_id'],path)).fetchone()
+        row=self.db.execute('SELECT input,state,metrics FROM prep_tasks WHERE id=? AND path=?',(task['task_id'],path)).fetchone()
         if not row or unpack(row['input'])!=task:raise ValueError('Compito non valido.')
         with self.db:
             self.db.execute("UPDATE prep_tasks SET state='running',started=?,attempts=attempts+1 WHERE id=?",(stamp(),task['task_id']))
@@ -460,7 +466,7 @@ class PreparationStudy:
             elif isinstance(source,list):
                 for v in source:register(v)
         register(task)
-        return {'started':True}
+        return {'started':True,'metrics':unpack(row['metrics'],{})}
 
     def preparation_read(self,task,result,method='tool'):
         row=self.db.execute('SELECT path,state FROM prep_tasks WHERE id=?',(task,)).fetchone()

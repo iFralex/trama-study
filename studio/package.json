@@ -12,7 +12,8 @@
     "verify:embeddings": "tsx server/verify-embeddings.ts",
     "verify:curriculum": "tsx server/verify-curriculum.ts",
     "verify:preparation": "tsx server/verify-preparation.ts",
-    "compare:models": "tsx server/compare-study-models.ts"
+    "compare:models": "tsx server/compare-study-models.ts",
+    "compare:routing": "tsx server/compare-routing.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.29",

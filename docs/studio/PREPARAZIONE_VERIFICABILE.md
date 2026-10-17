@@ -79,14 +79,19 @@ La modalità **Assegnazione automatica Luna/Sol**, in Modello e accesso, usa il 
 
 | Lavoro | Modello iniziale |
 |---|---|
-| Selezione preliminare, lettura ed estrazione strutturata dalle fonti | GPT-6 Luna |
+| Selezione preliminare circoscritta, senza riletture tramite strumenti | GPT-6 Luna |
+| Lettura tecnica, estrazione dei quesiti autentici e delle evidenze | GPT-6.1 Sol |
 | Notebook/codice strutturato, trascrizioni incomplete, associazioni a bassa affidabilità | GPT-6.1 Sol |
 | Perimetro, riconciliazione e mappa del corso | GPT-6.1 Sol |
 | Spiegazioni, capitoli, esercizi, HTML e correzioni | GPT-6.1 Sol |
 | Soluzione indipendente e revisioni disciplinare/didattica | GPT-6.1 Sol |
 | Chat, valutazioni dello studente e ripassi | GPT-6.1 Sol |
 
-Una selezione di Luna con esclusioni o intervalli incerti viene verificata da Sol prima di applicarla. Lo stesso accade per evidenze problematiche, fonti esterne/ricostruzioni generali, quesiti esclusi/ambigui e incongruenze riconoscibili fra formato e operazioni richieste. Un errore JSON, di citazione o di validazione passa direttamente a Sol. Sol riceve il compito completo e il candidato come dati non fidati, lavora in una sessione separata con accesso agli originali e conserva una sola correzione mirata se il proprio risultato non supera i controlli.
+Nella politica `hybrid-2`, la selezione riceve fino a 12 intervalli naturali, completi quando entrano nel budget e altrimenti marcati come troncati. Mantiene la motivazione completa del perimetro confermato; il profilo d’esame contiene conteggi e competenze, senza reinviare i testi dei quesiti. Usa un prompt specifico e nessuno strumento: la lettura tecnica successiva dispone ancora di tutti gli strumenti originali.
+
+Sol verifica **solo le esclusioni** proposte da Luna, in una sessione indipendente con gli stessi originali e il perimetro, senza vedere il giudizio di Luna. Il servizio valida tutti gli ID e fonde le risposte senza modificare le decisioni restanti. Gli intervalli incerti restano selezionati e vengono letti da Sol nella fase disciplinare; non provocano una duplicazione immediata. Se un documento ha almeno otto intervalli già verificati e tutti esclusi, i successivi vanno direttamente a Sol per evitare un probabile doppio passaggio integrale. Questo cambia il modello, non esclude ulteriori fonti automaticamente.
+
+Il candidato valido di Luna è salvato in SQLite **prima** della richiesta di verifica: un’interruzione o riavvio riprende la verifica residua, senza richiamare Luna. Il checkpoint è legato al compito, alle revisioni delle fonti, all’obiettivo e alla versione della politica. Un risultato strutturalmente non valido passa a Sol per la correzione completa; Sol dispone di un solo tentativo di riparazione. I consumi includono anche i tentativi precedenti alla ripresa.
 
 La scelta non usa una percentuale di sicurezza dichiarata dal modello. Le regole sono euristiche, non dimostrano che ogni ambiguità verrà riconosciuta; mappa, contenuti e revisioni restano compiti esperti. Le fonti protette e i temi riservati rimangono esclusi anche durante il passaggio fra modelli.
 
@@ -94,4 +99,4 @@ L’avanzamento mostra il modello attivo e il motivo dell’assegnazione/passagg
 
 Le richieste di preparazione restano sequenziali e la chat ha priorità fra i compiti. Un modello lettore non disponibile può essere sostituito dall’esperto. Un limite condiviso ChatGPT arresta invece il lavoro: non viene aggirato provando l’altro modello. Le configurazioni di budget vengono calcolate per il modello effettivamente usato. Le identità dei compiti includono modello e versione della politica; una ricognizione preliminare non crea compiti pendenti inutilizzati.
 
-Configurazione: `preparation_routing` nelle impostazioni SQLite, politica `hybrid-1`. Endpoint `POST /api/model-routing` con `{enabled:boolean}`. `GET /api/models` riporta modello singolo e politica salvata; il salvataggio dell’impostazione non invia materiali al provider. Le chiamate effettive iniziano con la ripresa della preparazione o una richiesta di chat.
+Configurazione: `preparation_routing` nelle impostazioni SQLite, politica `hybrid-2`. Endpoint `POST /api/model-routing` con `{enabled:boolean}`. `GET /api/models` riporta modello singolo e politica salvata; il salvataggio dell’impostazione non invia materiali al provider. Le chiamate effettive iniziano con la ripresa della preparazione o una richiesta di chat.

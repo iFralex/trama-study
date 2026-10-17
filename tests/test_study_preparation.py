@@ -136,6 +136,31 @@ class PreparationTest(unittest.TestCase):
         self.assertEqual(self.store.course_exam_profile(self.path)['total'],0)
         with self.assertRaises(ValueError):self.store.preparation_reject('another-path',task['task_id'],'error',output)
 
+    def test_bounded_selection_keeps_uncertain_sources_for_complete_reading(self):
+        self.start();kept=None
+        for _ in range(30):
+            task=self.task()
+            if task['kind']=='exam_reading':self.read(task);continue
+            if task['kind']=='evidence_reading':
+                self.assertIsNotNone(kept)
+                piece=next(p for p in task['sources'] if p['id']==kept)
+                self.assertEqual(piece['selection_status'],'uncertain')
+                self.assertEqual(piece['text'],self.store.source(kept)['text'])
+                return
+            self.assertEqual(task['kind'],'selection')
+            self.assertLessEqual(len(task['previews']),12)
+            self.assertNotIn('questions',task['exam_profile'])
+            decisions=[]
+            for preview in task['previews']:
+                original=self.store.source(preview['id'])['text']
+                self.assertTrue(original.startswith(preview['preview']))
+                self.assertEqual(preview['truncated'],len(original)>len(preview['preview']))
+                status='outside'
+                if kept is None:kept=preview['id'];status='uncertain'
+                decisions.append({'source':preview['id'],'status':status,'reason':'Test: dubbio conservato o esclusione verificata','skills':[]})
+            self.commit(task,{'decisions':decisions})
+        self.fail('Uncertain source was not retained for reading')
+
     def test_model_routing_peek_does_not_create_orphan_tasks(self):
         self.start()
         before=self.store.db.execute('SELECT count(*) FROM prep_tasks WHERE path=?',(self.path,)).fetchone()[0]
