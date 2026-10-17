@@ -28,17 +28,18 @@ from pathlib import Path
 p=Path(sys.argv[1])/'corsi'/'general-course-2026'/'materiali';p.mkdir(parents=True)
 for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM uses processors and shared memory. EREW forbids concurrent reads and writes.'),('exam-training.pdf','Exercise 1. Explain the difference between EREW and CREW. Motivate your answer.'),('exam-heldout.pdf','HOLDOUT_SECRET: explain a fresh algorithm.'),('exam-heldout.sol.pdf','HOLDOUT_SOLUTION_SECRET')]:
  d=pymupdf.open();pg=d.new_page();pg.insert_text((30,40),text);d.save(p/name);d.close()`,root]);
-  const bridge=new Bridge(python,project,root);const payloads:any[]=[],phases:string[]=[];let source='',failedOnce=false;
+  const bridge=new Bridge(python,project,root);const payloads:any[]=[],phases:string[]=[];let source='',failedOnce=false,rejectedQuestionOnce=false,currentTask:any;
   const server=createServer(async(req,res)=>{
     let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);payloads.push(body);
     const message=[...body.messages].reverse().find((m:any)=>m.role==='user');const text=typeof message.content==='string'?message.content:message.content.map((p:any)=>p.text??'').join('');
-    const task=JSON.parse(text.split('Compito (dati):\n').at(-1));phases.push(task.kind);let output:any;
+    const task=text.includes('Compito (dati):\n')?JSON.parse(text.split('Compito (dati):\n').at(-1)):currentTask;currentTask=task;phases.push(task.kind);let output:any;
     if(task.kind==='scope')output={summary:'Primo parziale: PRAM',included:['PRAM'],excluded:['Secondo parziale'],clarification:null};
     if(task.kind==='selection')output={decisions:task.previews.map((p:any)=>({source:p.id,status:'relevant',reason:'Contiene PRAM',skills:['PRAM']}))};
     if(['exam_reading','evidence_reading'].includes(task.kind)){
       if(task.kind==='evidence_reading'&&!failedOnce){failedOnce=true;res.statusCode=503;res.end('temporary failure');return;}
       output={evidence:[{concept:'PRAM',statement:'PRAM uses processors and shared memory.',sources:[task.sources[0].id],assumptions:['Abstract model']}],questions:task.kind==='exam_reading'?[{text:'Explain the difference between EREW and CREW. Motivate your answer.',format:'open',in_scope:true,skills:['PRAM'],sources:[task.sources[0].id]}]:[]};
     }
+    if(task.kind==='exam_reading'&&!rejectedQuestionOnce){rejectedQuestionOnce=true;output.questions[0].text='INVENTED_QUESTION_NOT_IN_PAPER';}
     if(task.kind==='map')output={chapters:[{id:'pram',title:'PRAM dalle basi',objective:'Capire il modello',prerequisites:[],sources:[source],priority:'alta',priority_reason:'Programma e tema autentico',assessment:'Domanda aperta',coverage:[...new Set(task.selection.map((d:any)=>d.document))]}],gaps:[],outside_scope:[],coverage_notes:'Fonti selezionate',objective_coverage:[{index:0,chapters:['pram']}]};
     if(task.kind==='map_review')output={summary:'Mappa completa',checked_objectives:[0],issues:[]};
     if(task.kind==='chapter')output={blocks:[{id:'intro',kind:'text',text:'Un algoritmo è una sequenza di istruzioni. PRAM è un modello astratto.',sources:[source]},{id:'worked',kind:'text',text:'Esempio svolto: con due valori serve un livello di riduzione.',sources:[source]},{id:'exercise',kind:'activity',depends_on:['intro'],spec:{kind:'numeric',title:'Variante autonoma',prompt:'Otto valori: quanti livelli?',origin:'generated',assumptions:'Albero binario bilanciato',solution:'Tre livelli',answer:3,rubric:'Numero di livelli',sources:[source],verification:{model:'reduction_depth',input:{n:8},expected:3}}}]};
@@ -65,6 +66,10 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     assert.equal(ready.profile.total,1);assert.equal(ready.chapters[0].review.status,'reviewed');assert.equal(ready.current.content.blocks.length,3);
     assert.ok(phases.indexOf('exam_reading')<phases.indexOf('selection'));assert.ok(phases.indexOf('review_solve')<phases.indexOf('review_discipline'));assert.ok(phases.indexOf('review_discipline')<phases.indexOf('review_didactic'));
     assert.doesNotMatch(JSON.stringify(payloads),/HOLDOUT_SECRET|HOLDOUT_SOLUTION_SECRET/);
+    assert.equal(phases.filter(p=>p==='exam_reading').length,2);
+    const diagnostics=JSON.parse(execFileSync(python,['-c',`import sqlite3,json,sys
+c=sqlite3.connect(sys.argv[1]);print(json.dumps(c.execute('SELECT error,output FROM prep_rejections').fetchall()))`,path.join(root,'.state/studio/studio.sqlite3')],{encoding:'utf8'}));
+    assert.equal(diagnostics.length,1);assert.match(diagnostics[0][0],/questions\[0\]/);assert.match(diagnostics[0][1],/INVENTED_QUESTION_NOT_IN_PAPER/);
     assert.ok(Object.keys(ready.preparation.task_counts).includes('done'));assert.equal(tutor.preparationOwner,undefined);
     const fresh=await bridge.call('preparation_restart',{path:p.id});assert.equal(fresh.plan,null);assert.equal((await bridge.call('preparation_evidence',{path:fresh.id})).length,0);
   }finally{engine?.close();bridge.close();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}

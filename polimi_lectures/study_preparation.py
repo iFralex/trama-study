@@ -6,10 +6,11 @@ import json
 import math
 import re
 import subprocess
+import unicodedata
 from collections import Counter
 from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles
 
-VERSION='selective-2.1'
+VERSION='selective-2.2'
 STATUSES={'relevant','prerequisite','outside','uncertain'}
 
 def digest(value):return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -28,6 +29,17 @@ def clean_question(text):
         lines.append(line)
     return re.sub(r'\s+',' ',' '.join(lines)).strip().casefold()
 
+def exam_tokens(text):
+    """Ignore layout, not mathematical meaning or program identifiers."""
+    text=unicodedata.normalize('NFC',str(text)).replace('\u00ad','')
+    text=re.sub(r'(?m)^\s*_{3,}\s*$', '', text)
+    text=text.translate(str.maketrans({'ﬀ':'ff','ﬁ':'fi','ﬂ':'fl','ﬃ':'ffi','ﬄ':'ffl','−':'-','–':'-','—':'-','“':'"','”':'"','‘':"'",'’':"'"}))
+    return re.findall(r'\w+|[^\w\s]',text)
+
+def exam_contains(text,original):
+    needle=exam_tokens(text);haystack=exam_tokens(original)
+    return bool(needle) and any(haystack[i:i+len(needle)]==needle for i in range(len(haystack)-len(needle)+1))
+
 class PreparationStudy:
     def setup_preparation(self):
         self.db.executescript('''
@@ -38,6 +50,7 @@ class PreparationStudy:
         CREATE TABLE IF NOT EXISTS prep_spans(path TEXT,source TEXT,fingerprint TEXT,status TEXT,reason TEXT,skills TEXT,selected INTEGER DEFAULT 0,done INTEGER DEFAULT 0,cursor INTEGER DEFAULT 0,PRIMARY KEY(path,source));
         CREATE TABLE IF NOT EXISTS prep_claims(path TEXT,id TEXT,data TEXT,task TEXT,PRIMARY KEY(path,id));
         CREATE TABLE IF NOT EXISTS prep_tasks(id TEXT PRIMARY KEY,path TEXT,kind TEXT,input TEXT,state TEXT,result TEXT,error TEXT,attempts INTEGER DEFAULT 0,started TEXT,finished TEXT,metrics TEXT);
+        CREATE TABLE IF NOT EXISTS prep_rejections(id TEXT PRIMARY KEY,path TEXT,task TEXT,error TEXT,output TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS prep_external(task TEXT,url TEXT,fingerprint TEXT,excerpt TEXT,PRIMARY KEY(task,url));
         CREATE TABLE IF NOT EXISTS prep_reads(task TEXT,source TEXT,start INTEGER,end INTEGER,fingerprint TEXT,method TEXT,excerpt TEXT,PRIMARY KEY(task,source,start,end,method));
         CREATE TABLE IF NOT EXISTS prep_issues(path TEXT,id TEXT,chapter TEXT,block TEXT,severity TEXT,data TEXT,state TEXT,PRIMARY KEY(path,id));
@@ -431,7 +444,7 @@ class PreparationStudy:
         if not row or unpack(row['input'])!=task:raise ValueError('Compito non valido.')
         with self.db:
             self.db.execute("UPDATE prep_tasks SET state='running',started=?,attempts=attempts+1 WHERE id=?",(stamp(),task['task_id']))
-            self.db.execute('UPDATE prep_runs SET phase=?,current=?,error=NULL,updated=? WHERE path=?',(task['kind'],task['task_id'],stamp(),path))
+            self.db.execute('UPDATE prep_runs SET version=?,phase=?,current=?,error=NULL,updated=? WHERE path=?',(VERSION,task['kind'],task['task_id'],stamp(),path))
         def register(source):
             if isinstance(source,dict) and source.get('id') and 'text' in source:
                 self.preparation_read(task['task_id'],source,'input')
@@ -510,20 +523,41 @@ class PreparationStudy:
                     if any(not self.db.execute('SELECT 1 FROM prep_external WHERE task=? AND url=?',(task['task_id'],url)).fetchone() for url in urls):raise ValueError('Fonte web non letta tramite gli strumenti.')
                 refs=self._prep_refs(path,task,e.get('sources'));validated.append(dict(e,sources=refs,read_ranges=[dict(r) for r in self.db.execute('SELECT source,start,end,method FROM prep_reads WHERE task=?',(task['task_id'],)) if r['source'] in refs]))
             questions=result.get('questions',[])
-            for q in questions:
+            if not isinstance(questions,list):raise ValueError('questions deve essere una lista di quesiti.')
+            def validate_question(question_index,q):
+                if not isinstance(q,dict) or not isinstance(q.get('text'),str):raise ValueError('Quesito senza testo originale valido.')
+                label=f"questions[{question_index}]"
                 refs=self._prep_refs(path,task,q.get('sources'))
                 if not q.get('text') or q.get('format') not in ('choice','numeric','open','code','mixed','unknown') or not isinstance(q.get('in_scope'),bool) or not q.get('skills'):raise ValueError('Quesito incompleto.')
                 origin='exam' if kind=='exam_reading' else q.get('origin','generated')
-                if kind=='exam_reading' and any(self.source(ref)['document']!=task['document'] for ref in refs):raise ValueError('Il quesito deve citare la prova originale.')
+                if kind=='exam_reading' and any(self.source(ref)['document']!=task['document'] for ref in refs):raise ValueError(f'{label}: il quesito deve citare soltanto pagine della prova originale {task["document"]}. Fonti ricevute: {refs}.')
                 if origin=='exam' and kind!='exam_reading':raise ValueError('Una domanda didattica non può alimentare il profilo d’esame.')
                 if q['format']=='choice' and (not isinstance(q.get('options'),list) or len(q['options'])<2):raise ValueError('Formato a scelta non attestato: conserva unknown/open senza inventare opzioni.')
                 if kind=='exam_reading':
-                    original=' '.join(r[0] or '' for r in self.db.execute('SELECT excerpt FROM prep_reads WHERE task=?',(task['task_id'],)))
-                    normalize=lambda text:' '.join(re.findall(r'\w+',text.casefold()))
-                    if normalize(q['text']) not in normalize(original):raise ValueError('Testo del quesito non attestato: riporta il testo originale senza inventare o parafrasare la domanda.')
+                    # Validate each citation independently. Never borrow words from unrelated
+                    # pages or join disjoint tool reads into a fictitious contiguous quotation.
+                    originals=[]
+                    for ref in refs:
+                        receipts=self.db.execute('SELECT excerpt,start,end,method FROM prep_reads WHERE task=? AND source=? ORDER BY method,start,end',(task['task_id'],ref)).fetchall()
+                        originals.extend(r['excerpt'] or '' for r in receipts)
+                        lines=list({r['start']:r for r in receipts if r['method'] in ('read_material','read_scope_material') and r['start']==r['end']}.values())
+                        group=[];previous=None
+                        for receipt in sorted(lines,key=lambda r:r['start']):
+                            if previous is not None and receipt['start']!=previous+1:
+                                if group:originals.append('\n'.join(group))
+                                group=[]
+                            group.append(receipt['excerpt'] or '');previous=receipt['start']
+                        if group:originals.append('\n'.join(group))
+                    if not any(exam_contains(q['text'],original) for original in originals):
+                        raise ValueError(f'{label}: testo non attestato nelle pagine citate {refs}: {q["text"][:180]!r}. Copia un singolo quesito/sottopunto contiguo, con codice, formule e opzioni originali; non unire domande distinte. Le righe vuote per le risposte sono ignorate.')
                     for option in q.get('options',[]):
-                        if normalize(str(option)) not in normalize(original):raise ValueError('Opzione non presente nel tema originale.')
+                        if not any(exam_contains(str(option),original) for original in originals):raise ValueError(f'{label}: opzione non presente nelle pagine citate.')
                 q.update(origin=origin,authenticity_verified=kind=='exam_reading',sources=refs,family=digest([re.sub(r'\d+','#',clean_question(q['text'])),q['format']])[:24])
+            question_errors=[]
+            for question_index,q in enumerate(questions):
+                try:validate_question(question_index,q)
+                except ValueError as error:question_errors.append(f'questions[{question_index}]: {error}')
+            if question_errors:raise ValueError('\n'.join(question_errors))
             with self.db:
                 for e in validated:
                     cid=digest([e['concept'],e['statement'],e['sources']])[:24]
@@ -704,6 +738,13 @@ class PreparationStudy:
         current=self.db.execute('SELECT kind,state,started,error,attempts,metrics FROM prep_tasks WHERE id=?',(run['current'],)).fetchone() if run['current'] else None
         counts=dict(self.db.execute('SELECT state,count(*) FROM prep_tasks WHERE path=? GROUP BY state',(path,)).fetchall())
         return dict(run,current_task=dict(current) if current else None,task_counts=counts,issues=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND state!='superseded' ORDER BY rowid",(path,))])
+
+    def preparation_reject(self,path,task,error,output):
+        row=self.db.execute('SELECT state FROM prep_tasks WHERE id=? AND path=?',(task,path)).fetchone()
+        if not row or row['state'] not in ('running','waiting','correcting'):raise ValueError('Compito non attivo.')
+        if not isinstance(output,str) or len(output)>250000:raise ValueError('Diagnostica del provider troppo lunga.')
+        with self.db:self.db.execute('INSERT INTO prep_rejections VALUES(?,?,?,?,?,?)',(ident(),path,task,str(error)[:5000],output,stamp()))
+        return {'saved':True}
 
     def preparation_metric(self,path,task,state,error=None,metrics=None):
         if state not in ('waiting','correcting','error','paused'):raise ValueError('Stato non valido.')

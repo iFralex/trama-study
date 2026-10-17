@@ -4,6 +4,7 @@ import unittest
 from tests import test_study as fixtures
 from polimi_lectures.study import Study
 from polimi_lectures.study_course import pack
+from polimi_lectures.study_preparation import exam_contains
 
 @unittest.skipIf(fixtures.pymupdf is None,'Requires native slides runtime')
 class PreparationTest(unittest.TestCase):
@@ -95,6 +96,45 @@ class PreparationTest(unittest.TestCase):
         profile=self.store.course_exam_profile(self.path)
         self.assertEqual(profile['total'],1);self.assertEqual(profile['excluded_total'],1)
         self.assertNotIn('excluded',profile['skills'])
+
+    def test_exam_text_ignores_answer_blanks_but_preserves_math_and_code(self):
+        self.assertTrue(exam_contains('A. Define PRAM. B. Explain EREW.', 'A. Define PRAM.\n__________________\nB. Explain EREW.'))
+        self.assertTrue(exam_contains('T(n) = n − 1', 'T(n) = n - 1'))
+        self.assertFalse(exam_contains('T(n) = n + 1', 'T(n) = n - 1'))
+        self.assertFalse(exam_contains('i <= n', 'i >= n'))
+        self.assertFalse(exam_contains('n2', 'n²'))
+        self.assertFalse(exam_contains('x = 1', 'X = 1'))
+        self.assertTrue(exam_contains('Define PRAM.', 'Deﬁne PRAM.'))
+        self.assertFalse(exam_contains('x_private = 1', 'x_shared = 1'))
+        self.assertFalse(exam_contains('Define PRAM.', 'Describe the PRAM model.'))
+
+    def test_exam_question_cannot_borrow_text_from_another_read_page(self):
+        self.start();task=self.task();self.store.preparation_begin(self.path,task)
+        other=self.store.db.execute("SELECT id FROM passages WHERE course=? AND kind='video'",(self.course,)).fetchone()[0]
+        self.store.preparation_read(task['task_id'],self.store.source(other),'read_source')
+        result={'evidence':[{'concept':'PRAM','statement':'Question in the paper','sources':[task['sources'][0]['id']]}], 'questions':[{'text':'This is the PRAM reduction explanation.','format':'open','in_scope':True,'skills':['PRAM'],'sources':[task['sources'][0]['id']]}]}
+        with self.assertRaisesRegex(ValueError,r'questions\[0\].*testo non attestato'):self.store.preparation_commit(self.path,task,result)
+        self.assertEqual(self.store.course_exam_profile(self.path)['total'],0)
+
+    def test_all_bad_questions_are_reported_together_and_commit_is_atomic(self):
+        self.start();task=self.task();self.store.preparation_begin(self.path,task)
+        ref=task['sources'][0]['id']
+        result={'evidence':[{'concept':'PRAM','statement':'Evidence','sources':[ref]}], 'questions':[
+            {'text':'Invented first question','format':'open','in_scope':True,'skills':['PRAM'],'sources':[ref]},
+            {'text':'Invented second question','format':'open','in_scope':True,'skills':['PRAM'],'sources':[ref]}]}
+        with self.assertRaises(ValueError) as caught:self.store.preparation_commit(self.path,task,result)
+        self.assertIn('questions[0]',str(caught.exception));self.assertIn('questions[1]',str(caught.exception))
+        self.assertEqual(self.store.course_exam_profile(self.path)['total'],0)
+        self.assertEqual(self.store.preparation_evidence(self.path),[])
+
+    def test_rejected_provider_output_is_preserved_without_committing_questions(self):
+        self.start();task=self.task();self.store.preparation_begin(self.path,task)
+        output='{"questions":[{"text":"bad quote"}]}'
+        self.store.preparation_reject(self.path,task['task_id'],'questions[0]: testo non attestato',output)
+        saved=self.store.db.execute('SELECT output,error FROM prep_rejections WHERE task=?',(task['task_id'],)).fetchone()
+        self.assertEqual(saved['output'],output);self.assertIn('questions[0]',saved['error'])
+        self.assertEqual(self.store.course_exam_profile(self.path)['total'],0)
+        with self.assertRaises(ValueError):self.store.preparation_reject('another-path',task['task_id'],'error',output)
 
     def test_full_pipeline_exams_first_and_two_complete_reviews_before_publish(self):
         chapter=self.to_chapter();content=self.content();self.commit(chapter,content)
