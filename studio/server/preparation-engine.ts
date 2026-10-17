@@ -1,3 +1,5 @@
+import {randomUUID} from 'node:crypto';
+import {preparationRoute,expertCheckReason,sumUsage,type ModelRef} from './model-routing';
 import {estimateTokens} from '@earendil-works/pi-coding-agent';
 import type {Bridge} from './bridge';
 import type {Tutor} from './tutor';
@@ -36,12 +38,19 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
   await bridge.call('course_status',{path,status:'running'});
   try{
     while(!job.paused){
-      // A single preparation request globally; interactive chat gets the next turn first.
       while((tutor.preparationOwner&&tutor.preparationOwner!==path)||tutor.busySessions.size){if(job.paused)return;await new Promise(r=>setTimeout(r,250));}
       tutor.preparationOwner=path;
-      const budget=await tutor.preparationBudget();
-      const task=await bridge.call('course_task',{path,input_tokens:budget.input,model_key:budget.key});
-      if(task.kind==='done'){await bridge.call('course_status',{path,status:'ready'});break;}
+      const base=await tutor.preparationBudget(),policy=await tutor.preparationRouting();
+      const peek=await bridge.call('course_peek_task',{path,input_tokens:base.input,model_key:base.key});
+      if(peek.kind==='done'){await bridge.call('course_status',{path,status:'ready'});break;}
+      let route=preparationRoute(peek,policy,base.model);let budget:Awaited<ReturnType<Tutor['preparationBudget']>>=base;
+      try{budget=await tutor.preparationBudget(route.model);}catch(error){
+        if(!route.worker||!policy)throw error;
+        route={model:{provider:policy.provider,id:policy.expert},worker:false,reason:'Lettore non disponibile: uso il modello di verifica.'};
+        budget=await tutor.preparationBudget(route.model);
+      }
+      const key=budget.key+(policy?'|'+policy.version+':expert='+policy.provider+':'+policy.expert:'');
+      const task=await bridge.call('course_task',{path,input_tokens:budget.input,model_key:key});
       await bridge.call('preparation_begin',{path,task});
       if(task.kind==='publish'){
         const saved=await bridge.call('preparation_commit',{path,task,result:{}});
@@ -49,46 +58,78 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
         continue;
       }
       const role=task.kind==='scope'?'scope':task.kind.startsWith('review_')||task.kind==='map_review'?task.kind:task.kind==='chapter'||task.kind==='repair_chapter'?'author':'preparation';
-      const session=await tutor.create(start.sid,false,role,task.task_id);job.session=session;
-      let output='',providerError:Error|undefined,usage:any,corrected=false;const began=Date.now();
-      const unsubscribe=session.subscribe((event:any)=>{
-        if(event.type==='message_start'&&event.message?.role==='assistant')output='';
-        if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')output+=event.assistantMessageEvent.delta;
-        if(event.type==='message_end'&&event.message?.role==='assistant'){
-          if(['error','aborted'].includes(event.message.stopReason))providerError=Error(event.message.errorMessage??'Provider interrotto.');
-          usage=event.message.usage??usage;
-        }
-      });
-      const timer=setTimeout(()=>void session.abort(),600000);
-      try{
-        const prompt=preparationInstructions(task.kind)+'\n\nCompito (dati):\n'+JSON.stringify(task);
+      const calls:any[]=[];let session:any,active:ModelRef=route.model,worker=route.worker,output='',corrected=false,repairUsed=false,escalation:string|undefined;
+      const began=Date.now();
+      const routing=()=>({version:policy?.version??'single',primary:route.model,active,reason:route.reason,escalation_reason:escalation});
+      const metric=async(state:string,error?:string)=>bridge.call('preparation_metric',{path,task:task.task_id,state,error,metrics:{elapsed_ms:Date.now()-began,routing:routing()}});
+      const switchToExpert=async(reason:string)=>{
+        if(!policy)throw Error('Modello di verifica non configurato.');
+        session?.dispose();session=undefined;job.session=undefined;
+        worker=false;active={provider:policy.provider,id:policy.expert};budget=await tutor.preparationBudget(active);escalation=reason;
+        await metric('correcting');
+      };
+      const ask=async(prompt:string)=>{
         const estimate=estimateTokens({role:'user',content:[{type:'text',text:prompt}],timestamp:Date.now()} as any);
         if(estimate>budget.context-Math.min(8192,budget.output)-2048)throw Error('Contesto insufficiente per questo compito: serve una suddivisione ulteriore, nessun contenuto è stato scartato.');
-        for(let transport=0;;transport++){
-          output='';providerError=undefined;
-          await bridge.call('preparation_metric',{path,task:task.task_id,state:'waiting',metrics:{estimated_input_tokens:estimate,elapsed_ms:Date.now()-began}});
-          try{await session.prompt(prompt);if(providerError)throw providerError;break;}
-          catch(error:any){if(job.paused||transport>=2||!/(429|502|503|504|rate.limit|temporar|timeout|fetch failed)/i.test(error.message))throw error;await new Promise(r=>setTimeout(r,Math.min(30000,1000*2**transport)));}
+        session??=await tutor.create(start.sid,false,role,task.task_id,active);job.session=session;
+        output='';let error:Error|undefined;const messages:any[]=[];const when=Date.now();
+        const unsubscribe=session.subscribe((event:any)=>{
+          if(event.type==='message_start'&&event.message?.role==='assistant')output='';
+          if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')output+=event.assistantMessageEvent.delta;
+          if(event.type==='message_end'&&event.message?.role==='assistant'){
+            if(event.message.usage)messages.push({usage:event.message.usage});
+            if(['error','aborted'].includes(event.message.stopReason))error=Error(event.message.errorMessage??'Provider interrotto.');
+          }
+        });
+        try{await session.prompt(prompt);if(error)throw error;}
+        catch(e:any){error=e;throw e;}
+        finally{
+          unsubscribe();const record={model:active,role,elapsed_ms:Date.now()-when,estimated_input_tokens:estimate,usage:sumUsage(messages),error:error?.message,output};calls.push(record);
+          await bridge.call('preparation_model_call',{path,task:task.task_id,call:randomUUID(),model:active,role,data:record});
         }
-        if(job.paused)break;
-        for(let repair=0;repair<2;repair++){
+      };
+      const prompt=(candidate?:string,reason?:string)=>preparationInstructions(task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
+      const timer=setTimeout(()=>void session?.abort(),600000);
+      try{
+        let next=prompt();
+        for(;;){
+          for(let transport=0;;transport++){
+            await metric(escalation?'correcting':'waiting');
+            try{await ask(next);break;}
+            catch(error:any){
+              if(job.paused)throw error;
+              if(/Subscription Sharing|usage.limit|quota.exceeded/i.test(error.message))throw error;
+              if(worker&&policy&&/not supported|model.*not.*(?:available|found)/i.test(error.message)){
+                await switchToExpert('Il modello del lettore non è supportato da questo accesso.');next=prompt(undefined);continue;
+              }
+              if(transport>=2||!/(429|502|503|504|rate.limit|temporar|timeout|fetch failed)/i.test(error.message))throw error;
+              await new Promise(r=>setTimeout(r,Math.min(30000,1000*2**transport)));
+            }
+          }
+          if(job.paused)break;
           try{
             const result=JSON.parse(output.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));
+            const concern=worker?expertCheckReason(task.kind,result):null;
+            if(concern){const candidate=output;await switchToExpert(concern);next=prompt(candidate,concern);continue;}
             await bridge.call('preparation_commit',{path,task,result});break;
           }catch(error:any){
-            if(!job.paused)await bridge.call('preparation_reject',{path,task:task.task_id,error:error.message,output});
-            if(job.paused||repair)throw error;
-            corrected=true;output='';providerError=undefined;
-            await bridge.call('preparation_metric',{path,task:task.task_id,state:'correcting',error:error.message,metrics:{elapsed_ms:Date.now()-began}});
-            await session.prompt('Il risultato è stato rifiutato e non salvato. Correggi UNA volta e restituisci il JSON completo. Non inventare evidenze per superare il controllo. Errore: '+String(error.message)+'\nSe serve una fonte, leggila prima tramite gli strumenti.');
-            if(job.paused)break;if(providerError)throw providerError;
+            await bridge.call('preparation_reject',{path,task:task.task_id,error:error.message,output});
+            if(job.paused)throw error;
+            corrected=true;
+            if(worker&&policy){const candidate=output;await switchToExpert('Risultato del lettore rifiutato: '+error.message);next=prompt(candidate,error.message);continue;}
+            if(repairUsed)throw error;repairUsed=true;
+            await metric('correcting',error.message);
+            next='Il risultato è stato rifiutato e non salvato. Correggi UNA volta e restituisci il JSON completo. Non inventare evidenze per superare il controllo. Errore: '+error.message+'\nSe serve una fonte, leggila prima tramite gli strumenti.';
           }
         }
         if(task.kind==='scope')break;
       }catch(error:any){
-        await bridge.call('preparation_metric',{path,task:task.task_id,state:job.paused?'paused':'error',error:error.message,metrics:{elapsed_ms:Date.now()-began,usage,corrected}});
+        await metric(job.paused?'paused':'error',error.message);
         if(!job.paused)throw error;
-      }finally{clearTimeout(timer);unsubscribe();session.dispose();job.session=undefined;await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{elapsed_ms:Date.now()-began,usage,corrected}});}
+      }finally{
+        clearTimeout(timer);session?.dispose();job.session=undefined;
+        await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{elapsed_ms:Date.now()-began,usage:sumUsage(calls),corrected,routing:routing()}});
+      }
     }
   }finally{if(tutor.preparationOwner===path)tutor.preparationOwner=undefined;}
 }

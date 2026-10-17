@@ -136,6 +136,30 @@ class PreparationTest(unittest.TestCase):
         self.assertEqual(self.store.course_exam_profile(self.path)['total'],0)
         with self.assertRaises(ValueError):self.store.preparation_reject('another-path',task['task_id'],'error',output)
 
+    def test_model_routing_peek_does_not_create_orphan_tasks(self):
+        self.start()
+        before=self.store.db.execute('SELECT count(*) FROM prep_tasks WHERE path=?',(self.path,)).fetchone()[0]
+        peek=self.store.course_peek_task(self.path,model_key='worker-policy')
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM prep_tasks WHERE path=?',(self.path,)).fetchone()[0],before)
+        actual=self.store.course_task(self.path,model_key='worker-policy')
+        self.assertEqual(peek['task_id'],actual['task_id'])
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM prep_tasks WHERE path=?',(self.path,)).fetchone()[0],before+1)
+
+    def test_model_routing_metrics_and_call_history_survive_restart(self):
+        self.start();task=self.task();self.store.preparation_begin(self.path,task)
+        routing={'primary':{'id':'worker'},'active':{'id':'expert'},'escalation_reason':'Source ambiguity'}
+        self.store.preparation_metric(self.path,task['task_id'],'waiting',metrics={'routing':routing})
+        self.store.preparation_metric(self.path,task['task_id'],'correcting',metrics={'elapsed_ms':10})
+        self.store.preparation_model_call(self.path,task['task_id'],'call1',{'provider':'test','id':'worker'},'preparation',{'usage':{'input':100},'output':'candidate'})
+        self.store.preparation_model_call(self.path,task['task_id'],'call1',{'provider':'test','id':'worker'},'preparation',{'usage':{'input':100},'output':'candidate'})
+        other=Study(self.root)
+        self.assertEqual(other.preparation_progress(self.path)['current_task']['routing'],routing)
+        self.assertEqual(other.db.execute('SELECT count(*) FROM prep_model_calls WHERE task=?',(task['task_id'],)).fetchone()[0],1)
+        other.db.close()
+        with self.assertRaises(ValueError):self.store.preparation_model_call('wrong-course-path',task['task_id'],'call2',{'provider':'test','id':'worker'},'preparation',{})
+        self.store.setting('preparation_routing',{'enabled':True,'worker':'worker','expert':'expert'})
+        self.assertTrue(self.store.setting('preparation_routing')['enabled'])
+
     def test_full_pipeline_exams_first_and_two_complete_reviews_before_publish(self):
         chapter=self.to_chapter();content=self.content();self.commit(chapter,content)
         self.assertIsNone(self.store._chapter(self.path,'pram'))

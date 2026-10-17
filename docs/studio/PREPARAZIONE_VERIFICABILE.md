@@ -72,3 +72,26 @@ Nella scheda del perimetro, **Chiedi una verifica sulle fonti** conserva la bozz
 Il motore `selective-2.2` richiede un singolo quesito/sottopunto contiguo, con testo letterale e riferimenti alle pagine della prova, separando le citazioni delle evidenze teoriche da quelle della domanda autentica. Il controllo ignora spazi, righe vuote per le risposte e ligature tipografiche, mantenendo operatori matematici, esponenti e maiuscole significative nel codice. Usa soltanto gli estratti effettivamente letti delle pagine citate; le letture di righe vengono ricomposte soltanto se contigue, senza inventare continuità fra intervalli separati.
 
 Tutti gli errori dei quesiti vengono restituiti insieme al modello nell’unico tentativo di correzione. Nessuna evidenza o domanda del lotto viene salvata prima che l’intera validazione riesca. Le risposte rifiutate vengono conservate nella tabella SQLite locale `prep_rejections`, con compito, errore e data; non entrano nel profilo d’esame o nei contenuti del tutor. Un riavvio mantiene checkpoint e quesiti validati, riprendendo soltanto il compito incompleto.
+
+### Assegnazione automatica Luna/Sol
+
+La modalità **Assegnazione automatica Luna/Sol**, in Modello e accesso, usa il provider OpenAI già configurato. La configurazione è reversibile e persistente; disattivandola si torna al modello singolo selezionato. Se viene selezionato un altro provider, la politica OpenAI non si applica. Vale dai prossimi compiti e non invalida le letture già completate.
+
+| Lavoro | Modello iniziale |
+|---|---|
+| Selezione preliminare, lettura ed estrazione strutturata dalle fonti | GPT-6 Luna |
+| Notebook/codice strutturato, trascrizioni incomplete, associazioni a bassa affidabilità | GPT-6.1 Sol |
+| Perimetro, riconciliazione e mappa del corso | GPT-6.1 Sol |
+| Spiegazioni, capitoli, esercizi, HTML e correzioni | GPT-6.1 Sol |
+| Soluzione indipendente e revisioni disciplinare/didattica | GPT-6.1 Sol |
+| Chat, valutazioni dello studente e ripassi | GPT-6.1 Sol |
+
+Una selezione di Luna con esclusioni o intervalli incerti viene verificata da Sol prima di applicarla. Lo stesso accade per evidenze problematiche, fonti esterne/ricostruzioni generali, quesiti esclusi/ambigui e incongruenze riconoscibili fra formato e operazioni richieste. Un errore JSON, di citazione o di validazione passa direttamente a Sol. Sol riceve il compito completo e il candidato come dati non fidati, lavora in una sessione separata con accesso agli originali e conserva una sola correzione mirata se il proprio risultato non supera i controlli.
+
+La scelta non usa una percentuale di sicurezza dichiarata dal modello. Le regole sono euristiche, non dimostrano che ogni ambiguità verrà riconosciuta; mappa, contenuti e revisioni restano compiti esperti. Le fonti protette e i temi riservati rimangono esclusi anche durante il passaggio fra modelli.
+
+L’avanzamento mostra il modello attivo e il motivo dell’assegnazione/passaggio. Ogni chiamata, incluse quelle fallite, è registrata nel database locale con output, modello, tempi e utilizzo restituito dal provider. I token di tutti i messaggi intermedi e dei due modelli vengono sommati; i token di ragionamento non vengono conteggiati una seconda volta. L’utilizzo dell’abbonamento non viene dedotto dai prezzi API.
+
+Le richieste di preparazione restano sequenziali e la chat ha priorità fra i compiti. Un modello lettore non disponibile può essere sostituito dall’esperto. Un limite condiviso ChatGPT arresta invece il lavoro: non viene aggirato provando l’altro modello. Le configurazioni di budget vengono calcolate per il modello effettivamente usato. Le identità dei compiti includono modello e versione della politica; una ricognizione preliminare non crea compiti pendenti inutilizzati.
+
+Configurazione: `preparation_routing` nelle impostazioni SQLite, politica `hybrid-1`. Endpoint `POST /api/model-routing` con `{enabled:boolean}`. `GET /api/models` riporta modello singolo e politica salvata; il salvataggio dell’impostazione non invia materiali al provider. Le chiamate effettive iniziano con la ripresa della preparazione o una richiesta di chat.

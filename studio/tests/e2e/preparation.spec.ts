@@ -55,3 +55,21 @@ test('scope followup keeps its draft and reopens source verification without con
   expect(saved.objective.confirmed).toBe(false);expect(saved.objective.scope_followups[0]).toContain('singoli quesiti');
   expect(saved.objective.reserved_requested).toEqual([]);
 });
+
+test('model assignment and expert handoff update without stealing the chat focus',async({page,request})=>{
+  const paths=await (await request.get('/api/courses/'+course+'/paths')).json();const target=paths.find((p:any)=>p.objective.summary==='Primo parziale PRAM');
+  let active='gpt-6-luna';
+  await page.route('**/api/paths/'+target.id,async route=>{const response=await route.fetch();const data=await response.json();data.preparation.current_task={...data.preparation.current_task,routing:{primary:{id:'gpt-6-luna'},active:{id:active},reason:'Lettura strutturata',escalation_reason:active==='gpt-6.1-sol'?'Verifica di una fonte ambigua':null}};await route.fulfill({response,json:data});});
+  await enter(page);await expect(page.locator('.preparation-progress')).toContainText('gpt-6-luna');
+  const chat=page.getByLabel('Messaggio al tutor del corso',{exact:true});await chat.fill('Bozza durante il cambio di modello');await chat.focus();active='gpt-6.1-sol';
+  await expect(page.locator('.preparation-progress')).toContainText('Verifica di una fonte ambigua',{timeout:8000});
+  await expect(chat).toBeFocused();await expect(chat).toHaveValue('Bozza durante il cambio di modello');
+});
+
+test('automatic model assignment can be enabled from model settings',async({page})=>{
+  await page.route('**/api/models',route=>route.fulfill({json:{models:[{provider:'openai',id:'gpt-6.1-sol',name:'GPT-6.1 Sol'},{provider:'openai',id:'gpt-6-luna',name:'GPT-6 Luna'}],providers:[],selected:{provider:'openai',id:'gpt-6.1-sol'},routing:{enabled:false}}}));
+  let saved:any;
+  await page.route('**/api/model-routing',async route=>{saved=route.request().postDataJSON();await route.fulfill({json:{saved:true,routing:{enabled:saved.enabled}}});});
+  await page.goto('/');await page.getByRole('button',{name:'◇ Modello e accesso'}).click();
+  const toggle=page.getByRole('checkbox',{name:'Assegnazione automatica Luna/Sol'});await expect(toggle).not.toBeChecked();await toggle.click();await expect(toggle).toBeChecked();expect(saved).toEqual({enabled:true});
+});

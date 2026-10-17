@@ -7,6 +7,7 @@ import {fsrs,createEmptyCard,Rating} from 'ts-fsrs';
 import {Bridge} from './bridge';
 import {Tutor} from './tutor';
 import {CourseEngine} from './course-engine';
+import {HYBRID_ROUTING} from './model-routing';
 import {Embeddings} from './embeddings';
 import {installationLoginOptions} from './login';
 import {mathSpeech} from './math-speech';
@@ -104,7 +105,17 @@ app.post('/api/sessions/:sid/events',run(async(req,res)=>{
 }));
 app.post('/api/sessions/:sid/assess',run(async(req,res)=>res.json(await tutor.assess(req.params.sid,req.body.attempt_id))));
 app.post('/api/sessions/:sid/correct',run(async(req,res)=>res.json(await bridge.call('correct',{sid:req.params.sid,attempt_id:req.body.attempt_id,text:req.body.text}))));
-app.get('/api/models',run(async(_req,res)=>res.json(await tutor.models())));
+app.get('/api/models',run(async(_req,res)=>res.json({...await tutor.models(),selected:await bridge.call('setting',{name:'model'}),routing:await bridge.call('setting',{name:'preparation_routing'})})));
+app.post('/api/model-routing',run(async(req,res)=>{
+  if(typeof req.body.enabled!=='boolean')throw Error('Specifica se attivare l’assegnazione automatica.');
+  const selected=await bridge.call('setting',{name:'model'});
+  if(req.body.enabled){
+    if(selected?.provider!=='openai')throw Error('Seleziona prima un modello OpenAI per usare Luna e Sol.');
+    const catalog=await tutor.models();
+    if(![HYBRID_ROUTING.worker,HYBRID_ROUTING.expert].every(id=>catalog.models.some(m=>m.provider==='openai'&&m.id===id)))throw Error('Completa l’accesso OpenAI con Luna e Sol disponibili.');
+  }
+  const routing={...HYBRID_ROUTING,enabled:req.body.enabled};await bridge.call('setting',{name:'preparation_routing',value:routing});res.json({saved:true,routing});
+}));
 app.post('/api/model',run(async(req,res)=>{const {provider,id}=req.body;const catalog=await tutor.models();if(!catalog.models.some(m=>m.provider===provider&&m.id===id))throw Error('Modello non disponibile. Completa l’accesso al provider.');await bridge.call('setting',{name:'model',value:{provider,id}});res.json({saved:true});}));
 
 // Auth uses Pi's provider-specific flow. Credentials never enter study history or logs.

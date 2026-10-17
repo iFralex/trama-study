@@ -8,6 +8,7 @@ import {Embeddings} from './embeddings';
 import {WebSources} from './web';
 import {scheduleCourseRecall} from './course-reviews';
 import {sourceBudget} from './preparation-engine';
+import {routingConfig,type ModelRef} from './model-routing';
 
 const SYSTEM=`Sei un tutor universitario personale. Parla in italiano, conserva la terminologia tecnica del corso.
 Usa le fonti del corso prima di affermare cosa dice il docente. Cita passaggi con [titolo](source:ID), solo ID effettivamente recuperati.
@@ -44,15 +45,20 @@ export class Tutor {
     return {models:available.map(m=>({provider:m.provider,id:m.id,name:m.name})),providers:this.runtime.getProviders().map(p=>({id:p.id,name:p.name,oauth:!!p.auth.oauth,loginLabel:p.auth.oauth?.loginLabel,subscription:p.auth.oauth?.isSubscription,apiKey:!!p.auth.apiKey?.login})),error:this.runtime.getError()};
   }
   preparationOwner?:string;
-  async preparationBudget(){
-    await this.models();const selected=await this.bridge.call('setting',{name:'model'});const models=await this.runtime!.getAvailable();
+  async preparationRouting(){
+    return routingConfig(await this.bridge.call('setting',{name:'preparation_routing'}),await this.bridge.call('setting',{name:'model'}));
+  }
+  async preparationBudget(override?:ModelRef){
+    await this.models();const selected=override??await this.bridge.call('setting',{name:'model'});const models=await this.runtime!.getAvailable();
     const model=models.find(m=>m.provider===selected?.provider&&m.id===selected?.id)??(!selected?models[0]:undefined);
     if(!model)throw Error('Seleziona un modello disponibile.');
-    return {input:sourceBudget(model,2500),context:model.contextWindow,output:model.maxTokens,key:model.provider+':'+model.id};
+    return {input:sourceBudget(model,2500),context:model.contextWindow,output:model.maxTokens,key:model.provider+':'+model.id,model:{provider:model.provider,id:model.id}};
   }
-  async create(sid:string,assessor=false,role='tutor',taskId?:string){
+  async create(sid:string,assessor=false,role='tutor',taskId?:string,override?:ModelRef){
     await this.models();
-    const selected=await this.bridge.call('setting',{name:'model'});
+    const configured=await this.bridge.call('setting',{name:'model'});
+    const policy=await this.preparationRouting();
+    const selected=override??(policy?{provider:policy.provider,id:policy.expert}:configured);
     const available=await this.runtime!.getAvailable();
     const model=available.find(m=>m.provider===selected?.provider&&m.id===selected?.id)??(!selected?available[0]:undefined);
     if(!model)throw Error('Seleziona un modello disponibile in Modello e accesso. Le risposte sono salvate.');

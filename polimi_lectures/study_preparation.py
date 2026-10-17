@@ -10,7 +10,7 @@ import unicodedata
 from collections import Counter
 from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles
 
-VERSION='selective-2.2'
+VERSION='selective-2.3'
 STATUSES={'relevant','prerequisite','outside','uncertain'}
 
 def digest(value):return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -50,6 +50,7 @@ class PreparationStudy:
         CREATE TABLE IF NOT EXISTS prep_spans(path TEXT,source TEXT,fingerprint TEXT,status TEXT,reason TEXT,skills TEXT,selected INTEGER DEFAULT 0,done INTEGER DEFAULT 0,cursor INTEGER DEFAULT 0,PRIMARY KEY(path,source));
         CREATE TABLE IF NOT EXISTS prep_claims(path TEXT,id TEXT,data TEXT,task TEXT,PRIMARY KEY(path,id));
         CREATE TABLE IF NOT EXISTS prep_tasks(id TEXT PRIMARY KEY,path TEXT,kind TEXT,input TEXT,state TEXT,result TEXT,error TEXT,attempts INTEGER DEFAULT 0,started TEXT,finished TEXT,metrics TEXT);
+        CREATE TABLE IF NOT EXISTS prep_model_calls(id TEXT PRIMARY KEY,path TEXT,task TEXT,model TEXT,role TEXT,data TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS prep_rejections(id TEXT PRIMARY KEY,path TEXT,task TEXT,error TEXT,output TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS prep_external(task TEXT,url TEXT,fingerprint TEXT,excerpt TEXT,PRIMARY KEY(task,url));
         CREATE TABLE IF NOT EXISTS prep_reads(task TEXT,source TEXT,start INTEGER,end INTEGER,fingerprint TEXT,method TEXT,excerpt TEXT,PRIMARY KEY(task,source,start,end,method));
@@ -349,8 +350,14 @@ class PreparationStudy:
             if row:revisions[row['id']]=row['fingerprint']
         data=dict(data,source_revisions=revisions);key=digest([VERSION,p['objective'],data])
         task=dict(data,task_id=key,engine=2,objective=p['objective'])
-        with self.db:self.db.execute('INSERT OR IGNORE INTO prep_tasks(id,path,kind,input,state) VALUES(?,?,?,?,?)',(key,path,data['kind'],pack(task),'pending'))
+        if not getattr(self,'_peek_preparation',False):
+            with self.db:self.db.execute('INSERT OR IGNORE INTO prep_tasks(id,path,kind,input,state) VALUES(?,?,?,?,?)',(key,path,data['kind'],pack(task),'pending'))
         return task
+
+    def course_peek_task(self,path,input_tokens=32000,model_key=''):
+        self._peek_preparation=True
+        try:return self.course_task(path,input_tokens,model_key)
+        finally:self._peek_preparation=False
 
     def course_task(self,path,input_tokens=32000,model_key=''):
         p=self._path(path)
@@ -737,7 +744,15 @@ class PreparationStudy:
         if not run:return None
         current=self.db.execute('SELECT kind,state,started,error,attempts,metrics FROM prep_tasks WHERE id=?',(run['current'],)).fetchone() if run['current'] else None
         counts=dict(self.db.execute('SELECT state,count(*) FROM prep_tasks WHERE path=? GROUP BY state',(path,)).fetchall())
-        return dict(run,current_task=dict(current) if current else None,task_counts=counts,issues=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND state!='superseded' ORDER BY rowid",(path,))])
+        details=dict(current) if current else None
+        if details:details['routing']=unpack(details.get('metrics'),{}).get('routing')
+        return dict(run,current_task=details,task_counts=counts,issues=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND state!='superseded' ORDER BY rowid",(path,))])
+
+    def preparation_model_call(self,path,task,call,model,role,data):
+        if not self.db.execute('SELECT 1 FROM prep_tasks WHERE id=? AND path=?',(task,path)).fetchone():raise ValueError('Compito non disponibile.')
+        if not isinstance(model,dict) or not model.get('provider') or not model.get('id') or not isinstance(data,dict):raise ValueError('Dati del modello non validi.')
+        with self.db:self.db.execute('INSERT OR IGNORE INTO prep_model_calls VALUES(?,?,?,?,?,?,?)',(call,path,task,pack(model),str(role)[:100],pack(data),stamp()))
+        return {'saved':True}
 
     def preparation_reject(self,path,task,error,output):
         row=self.db.execute('SELECT state FROM prep_tasks WHERE id=? AND path=?',(task,path)).fetchone()
@@ -748,8 +763,11 @@ class PreparationStudy:
 
     def preparation_metric(self,path,task,state,error=None,metrics=None):
         if state not in ('waiting','correcting','error','paused'):raise ValueError('Stato non valido.')
+        previous=self.db.execute('SELECT metrics FROM prep_tasks WHERE id=? AND path=?',(task,path)).fetchone()
+        if not previous:raise ValueError('Compito non disponibile.')
+        merged=dict(unpack(previous[0],{}),**(metrics or {}))
         with self.db:
-            self.db.execute('UPDATE prep_tasks SET state=?,error=?,metrics=? WHERE id=? AND path=?',(state,str(error)[:3000] if error else None,pack(metrics or {}),task,path))
+            self.db.execute('UPDATE prep_tasks SET state=?,error=?,metrics=? WHERE id=? AND path=?',(state,str(error)[:3000] if error else None,pack(merged),task,path))
             if state=='error':self.db.execute('UPDATE prep_runs SET error=? WHERE path=?',(str(error)[:3000],path))
         return {'saved':True}
 
