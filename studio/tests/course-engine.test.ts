@@ -73,3 +73,28 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     const after=await bridge.call('course_path_view',{path:p.id});assert.equal(after.recall,null);
   }finally{engine?.close();bridge.close();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}
 });
+
+test('reading citation repair is bounded and never commits an invalid checkpoint',async()=>{
+  for(const staysInvalid of [false,true]){
+    let committed=false,requests=0;const prompts:string[]=[],statuses:string[]=[];
+    const bridge={call:async(method:string,args:any)=>{
+      if(method==='course_path_view')return {sid:'session',position:{chapter:'chapter'},chapters:[]};
+      if(method==='course_status'){statuses.push(args.status);return {};}
+      if(method==='course_task')return committed?{kind:'done'}:{kind:'reading',allowed_sources:['read:0'],chunks:[{source:'read:0'}],previous:{}};
+      if(method==='course_commit'){
+        if(args.result.sources[0]!=='read:0')throw Error('La scheda deve citare i passaggi effettivamente letti.');
+        committed=true;return {};
+      }
+      throw Error('Unexpected method '+method);
+    }} as unknown as Bridge;
+    let listener:(event:any)=>void=()=>{};
+    const tutor={create:async()=>({subscribe:(fn:any)=>{listener=fn;return ()=>{};},dispose:()=>{},abort:async()=>{},prompt:async(prompt:string)=>{
+      prompts.push(prompt);requests++;
+      listener({type:'message_update',assistantMessageEvent:{type:'text_delta',delta:JSON.stringify({summary:'A source-grounded card',sources:[requests===1||staysInvalid?'unread:0':'read:0']})}});
+    }})} as unknown as Tutor;
+    const engine=new CourseEngine(bridge,tutor);
+    await engine.start('path');await idle(engine,'path');
+    assert.equal(requests,2);assert.match(prompts[1],/non è stato salvato/);assert.match(prompts[1],/read:0/);
+    assert.equal(committed,!staysInvalid);assert.equal(statuses.at(-1),staysInvalid?'error':'ready');
+  }
+});

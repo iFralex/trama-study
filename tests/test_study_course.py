@@ -99,6 +99,17 @@ class CourseTest(unittest.TestCase):
         self.store.import_course(self.course)
         self.assertTrue(self.store.db.execute('SELECT reserved FROM passages WHERE document=?',(self.held,)).fetchone()[0])
 
+    def test_reading_exposes_exact_allowed_citations_and_rejects_other_documents(self):
+        self.start();task=self.store.course_task(self.path)
+        self.assertEqual(set(task['allowed_sources']),{c['source'] for c in task['chunks']})
+        other=self.store.db.execute('SELECT p.id FROM passages p JOIN documents d ON d.id=p.document WHERE p.course=? AND p.document!=? AND p.reserved=0 AND p.solution=0 LIMIT 1',(self.course,task['document'])).fetchone()[0]
+        result={'summary':'Scheda con riferimento non letto','sources':[other]}
+        with self.assertRaisesRegex(ValueError,'La scheda deve citare'):self.store.course_commit(self.path,task,result)
+        self.assertEqual(self.store.course_task(self.path)['chunks'],task['chunks'])
+        result['sources']=[task['chunks'][0]['source']]
+        self.store.course_commit(self.path,task,result)
+        self.assertNotEqual(self.store.course_task(self.path).get('chunks'),task['chunks'])
+
     def test_reading_checkpoints_resume_without_reanalysis(self):
         self.start();task=self.store.course_task(self.path)
         self.store.course_commit(self.path,task,{'summary':'Una scheda','sources':[c['source'] for c in task['chunks']]})

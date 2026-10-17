@@ -258,7 +258,9 @@ class CourseStudy:
             for r in rows:
                 source=self.source(r['source'],allow_solutions=False)
                 chunks.append({'unit':r['id'],'source':source['id'],'page':source['page'],'start':source['start'],'end':source['end'],'quality':source['quality'],'metadata':source['metadata'],'text':source['text'][r['start']:r['end']]})
-            return {'kind':'reading','objective':o,'document':unit['document'],'fingerprint':doc['fingerprint'],'previous':unpack(doc['summary'],{}),'exam':is_exam(source['path']),'title':source['title'],'chunks':chunks}
+            previous=unpack(doc['summary'],{})
+            allowed_sources=sorted({c['source'] for c in chunks}|set(previous.get('sources',[])))
+            return {'kind':'reading','allowed_sources':allowed_sources,'objective':o,'document':unit['document'],'fingerprint':doc['fingerprint'],'previous':unpack(doc['summary'],{}),'exam':is_exam(source['path']),'title':source['title'],'chunks':chunks}
         doc=self.db.execute('SELECT * FROM course_documents WHERE path=? AND integrated=0 ORDER BY document LIMIT 1',(path,)).fetchone()
         if doc:return {'kind':'integrate','objective':o,'document':doc['document'],'fingerprint':doc['fingerprint'],'card':unpack(doc['summary']),'draft':self._plan(path),'exam_profile':self.course_exam_profile(path)}
         plan=self._plan(path)

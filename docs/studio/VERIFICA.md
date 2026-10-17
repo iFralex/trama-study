@@ -80,3 +80,10 @@ Pseudocodice nelle domande: verificato l’esempio RAM originale, con righe e ri
 Rimossa la preselezione alfabetica di due temi nell’inventario, che non conosceva ancora l’obiettivo. I suggerimenti arrivano nella scheda del perimetro, con motivazione e distinzione tra parziali ed esame completo; se la pertinenza non è determinabile, il modello deve omettere il tema. Il server rifiuta raccomandazioni di temi già esposti, duplicati, illeggibili, non d’esame o con etichetta esplicita incompatibile. Un perimetro ancora ambiguo non ammette suggerimenti. Le etichette sconosciute richiedono valutazione del modello, non sono una verifica deterministica del contenuto.
 
 Verificati 39 test Python (studio e corso personale), 16 test TypeScript/Pi, build e il percorso browser mirato alla creazione dell’obiettivo: nessuna preselezione né tema riservato prima della scheda. Le prove usano dati sintetici e nessuna nuova chiamata al provider personale.
+
+
+## Ripresa dopo citazioni rifiutate — 17 ottobre 2026
+
+Una preparazione reale si è fermata durante la lettura di un allineamento: il JSON del modello citava passaggi fuori dall’insieme consentito per la scheda cumulativa. Il checkpoint rifiutato non è stato salvato; quelli precedenti sono conservati. Ogni compito di lettura ora espone `allowed_sources` e le istruzioni distinguono i riferimenti ammessi dagli ID presenti dentro metadati/allineamenti. Un errore di appartenenza delle citazioni permette una sola richiesta di correzione nella stessa sessione, senza aggirare il validatore. Se la correzione resta invalida, la preparazione si ferma e conserva i checkpoint.
+
+40 test Python, 17 test TypeScript/Pi e build passati, compresa la ripresa con citazioni corrette e il rifiuto persistente dopo il limite di una correzione. I test del recupero usano un provider simulato.
