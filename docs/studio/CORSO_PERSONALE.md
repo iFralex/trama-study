@@ -67,6 +67,6 @@ PYTHONDONTWRITEBYTECODE=1 /percorso/python -m tests.seed_studio_e2e --root /priv
 
 Avviare il server con quella cartella, porta 4327 e `PI_CODING_AGENT_DIR` separata; poi eseguire `npm run test:e2e` da `studio`. La fixture aggiunge un corso sintetico per capitoli/chat/diario, conservando il corso sintetico dei test iniziali. Non eseguire i test browser sull’archivio personale.
 
-`npm run verify:curriculum` con `STUDIO_ROOT` prepara soltanto un payload locale di tre quesiti reali annotati, senza invio. `-- --send` usa il provider selezionato ed esegue la classificazione; il rapporto non crea sessioni o progressi personali. La verifica esterna del campione richiede l’autorizzazione specifica all’invio: in questa implementazione è stata preparata localmente, non eseguita.
+`npm run verify:curriculum` con `STUDIO_ROOT` prepara soltanto un payload locale di tre quesiti reali annotati, senza invio. `-- --send` usa il provider selezionato ed esegue la classificazione; il rapporto non crea sessioni o progressi personali. Il 17 ottobre 2026, dopo autorizzazione esplicita dello studente all’invio dei tre estratti a OpenAI `gpt-6.1-sol`, la verifica ha ottenuto 3/3 classificazioni corrette per formato, competenze e perimetro. È un campione limitato, non una validazione didattica del corso completo; dettagli in [VERIFICA.md](VERIFICA.md).
 
 I test tecnici e con provider simulato non certificano la correttezza di un corso generato. Restano necessarie la revisione del primo capitolo reale, una sessione dello studente e una prova differita su problemi nuovi.
