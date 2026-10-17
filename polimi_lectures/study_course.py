@@ -260,7 +260,7 @@ class CourseStudy:
                 chunks.append({'unit':r['id'],'source':source['id'],'page':source['page'],'start':source['start'],'end':source['end'],'quality':source['quality'],'metadata':source['metadata'],'text':source['text'][r['start']:r['end']]})
             previous=unpack(doc['summary'],{})
             allowed_sources=sorted({c['source'] for c in chunks}|set(previous.get('sources',[])))
-            return {'kind':'reading','allowed_sources':allowed_sources,'objective':o,'document':unit['document'],'fingerprint':doc['fingerprint'],'previous':unpack(doc['summary'],{}),'exam':is_exam(source['path']),'title':source['title'],'chunks':chunks}
+            return {'kind':'reading','card_limits':{'max_characters':16000,'target_characters':8000},'allowed_sources':allowed_sources,'objective':o,'document':unit['document'],'fingerprint':doc['fingerprint'],'previous':unpack(doc['summary'],{}),'exam':is_exam(source['path']),'title':source['title'],'chunks':chunks}
         doc=self.db.execute('SELECT * FROM course_documents WHERE path=? AND integrated=0 ORDER BY document LIMIT 1',(path,)).fetchone()
         if doc:return {'kind':'integrate','objective':o,'document':doc['document'],'fingerprint':doc['fingerprint'],'card':unpack(doc['summary']),'draft':self._plan(path),'exam_profile':self.course_exam_profile(path)}
         plan=self._plan(path)
@@ -326,7 +326,9 @@ class CourseStudy:
             status='clarification' if result['clarification'] else 'confirm'
             with self.db:self.db.execute('UPDATE course_paths SET objective=?,status=?,error=NULL WHERE id=?',(pack(o),status,path))
         elif kind=='reading':
-            if not result.get('summary') or len(pack(result))>16000:raise ValueError('Scheda fonte mancante o troppo lunga.')
+            if not isinstance(result.get('summary'),str) or not result['summary'].strip():raise ValueError('Scheda fonte senza sintesi: compila summary con una sintesi non vuota.')
+            card_size=len(pack(result))
+            if card_size>16000:raise ValueError(f'Scheda fonte troppo lunga: {card_size} caratteri; limite 16000. Comprimi la scheda completa, non solo summary; obiettivo 8000 caratteri.')
             refs=self._refs(p['course'],result.get('sources'))
             allowed={c['source'] for c in task['chunks']}|set(task['previous'].get('sources',[]))
             if not set(refs)<=allowed:raise ValueError('La scheda deve citare i passaggi effettivamente letti.')

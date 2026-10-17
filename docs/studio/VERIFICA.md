@@ -87,3 +87,10 @@ Verificati 39 test Python (studio e corso personale), 16 test TypeScript/Pi, bui
 Una preparazione reale si è fermata durante la lettura di un allineamento: il JSON del modello citava passaggi fuori dall’insieme consentito per la scheda cumulativa. Il checkpoint rifiutato non è stato salvato; quelli precedenti sono conservati. Ogni compito di lettura ora espone `allowed_sources` e le istruzioni distinguono i riferimenti ammessi dagli ID presenti dentro metadati/allineamenti. Un errore di appartenenza delle citazioni permette una sola richiesta di correzione nella stessa sessione, senza aggirare il validatore. Se la correzione resta invalida, la preparazione si ferma e conserva i checkpoint.
 
 40 test Python, 17 test TypeScript/Pi e build passati, compresa la ripresa con citazioni corrette e il rifiuto persistente dopo il limite di una correzione. I test del recupero usano un provider simulato.
+
+
+## Schede cumulative e budget — 17 ottobre 2026
+
+La preparazione reale si è successivamente fermata a 124 blocchi sul controllo generico di scheda mancante/troppo lunga; la scheda cumulativa precedente era di 15.652 caratteri, prossima al limite. Il risultato rifiutato non era stato conservato, quindi non si può distinguere retroattivamente sintesi assente da sforamento. Ora il validatore distingue i due casi e riporta dimensione e limite. Il compito espone budget obiettivo 8.000 e massimo 16.000 caratteri per l’intero JSON, con istruzioni di raggruppare concetti e non accodare cataloghi di frame. Anche queste due condizioni ammettono una sola correzione, senza tagliare automaticamente contenuti o allentare il controllo.
+
+Passati 41 test Python, 17 test TypeScript/Pi, controllo TypeScript e build; il test del motore copre sia la correzione riuscita sia il rifiuto persistente per lunghezza, sintesi e citazioni.

@@ -110,6 +110,18 @@ class CourseTest(unittest.TestCase):
         self.store.course_commit(self.path,task,result)
         self.assertNotEqual(self.store.course_task(self.path).get('chunks'),task['chunks'])
 
+    def test_oversized_or_empty_cards_are_rejected_without_losing_checkpoint(self):
+        self.start();task=self.store.course_task(self.path)
+        self.assertEqual(task['card_limits']['max_characters'],16000)
+        result={'summary':'x'*17000,'sources':[task['chunks'][0]['source']]}
+        with self.assertRaisesRegex(ValueError,'Scheda fonte troppo lunga: .*limite 16000'):self.store.course_commit(self.path,task,result)
+        self.assertEqual(self.store.course_task(self.path)['chunks'],task['chunks'])
+        result['summary']='  '
+        with self.assertRaisesRegex(ValueError,'Scheda fonte senza sintesi:'):self.store.course_commit(self.path,task,result)
+        result['summary']='Sintesi compatta: PRAM e ipotesi di accesso alla memoria.'
+        self.store.course_commit(self.path,task,result)
+        self.assertNotEqual(self.store.course_task(self.path).get('chunks'),task['chunks'])
+
     def test_reading_checkpoints_resume_without_reanalysis(self):
         self.start();task=self.store.course_task(self.path)
         self.store.course_commit(self.path,task,{'summary':'Una scheda','sources':[c['source'] for c in task['chunks']]})
