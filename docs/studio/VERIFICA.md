@@ -109,3 +109,6 @@ Implementazione completa delle fasi: perimetro, analisi dei temi originali, sele
 - Il primo rapporto, conservato in `/private/tmp/preparation-semantic-report-20261017.json`, aveva 48/50 e 49/50: l’ispezione ha trovato una classificazione gold errata del formato di una domanda aperta con origine incerta e un perimetro sintetico ambiguo sulle metriche. Corrette le annotazioni/perimetro, senza alterare il rapporto iniziale.
 
 Rimangono verifiche umane e temporali: correttezza didattica dei capitoli reali prodotti, sessione dello studente e prova differita su problemi nuovi. La doppia revisione AI non equivale a un giudizio indipendente garantito. Le sovrapposizioni non identificabili e le associazioni candidate restano limiti espliciti.
+
+
+Attivazione locale: commit `0ca6924`, servizio aggiornato sulla porta 4326, backup SQLite consistente prima della migrazione. Verificati integrità SQLite, conteggi storici conservati e modello configurato invariato. Il vecchio percorso è archiviato; il nuovo ha zero evidenze/piani ereditati. La prima ricognizione reale con il provider configurato è terminata senza errore e chiede conferma del confine del primo parziale (inclusione di Memory consistency & synchronization e OpenMP part 1 secondo il calendario). La lettura approfondita resta in attesa di questa risposta; nessun confine è assunto silenziosamente.
