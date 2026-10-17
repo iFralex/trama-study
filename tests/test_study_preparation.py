@@ -50,6 +50,52 @@ class PreparationTest(unittest.TestCase):
     def review(self,task,blocking=False):
         return {'summary':'Revisione completa','checked_blocks':[b['id'] for b in task['draft']['blocks']],'checked_sources':list({r for b in task['draft']['blocks'] for r in b.get('sources',b.get('spec',{}).get('sources',[]))}),'issues':[{'block':'intro','severity':'blocking','message':'Definizione da chiarire','sources':self.content()['blocks'][0]['sources']}] if blocking else []}
 
+    def test_scope_followup_reopens_only_unconfirmed_path_and_preserves_reservations(self):
+        p=self.store.course_create(self.course,'Primo parziale',reserved=[]);self.path=p['id'];self.sid=p['sid']
+        task=self.task();self.commit(task,{'summary':'Confine incerto','included':['PRAM'],'excluded':[],'clarification':'OpenMP incluso?'})
+        updated=self.store.preparation_scope_followup(self.path,'Controlla i parziali precedenti non riservati.')
+        self.assertEqual(updated['status'],'scope');self.assertFalse(updated['objective']['confirmed'])
+        self.assertEqual(updated['objective']['reserved_requested'],[])
+        self.assertNotEqual(self.task()['task_id'],task['task_id'])
+        self.assertIn('Controlla',self.task()['objective']['scope_followups'][0])
+        self.store.course_confirm(self.path)
+        with self.assertRaises(ValueError):self.store.preparation_scope_followup(self.path,'Cambia perimetro')
+
+    def test_scope_can_read_historical_questions_but_not_holdouts_or_solutions(self):
+        self.start()
+        docs=self.store.course_inventory(self.course)['documents']
+        training=next(d for d in docs if d['title']=='PC-1st-part-25-06-19.pdf')
+        result=self.store.course_scope_material(self.sid,training['id'])
+        self.assertIn('EREW',str(result))
+        lesson=next(d for d in docs if d['title']=='lecture.pdf')
+        self.assertIn('PRAM',str(self.store.course_scope_material(self.sid,lesson['id'])))
+        held=next(d for d in docs if d['title']=='PC-1st-part-25-07-21.pdf')
+        with self.assertRaises(ValueError):self.store.course_scope_material(self.sid,held['id'])
+        solution=next(d for d in docs if d['title']=='PC-1st-part-25-06-19.sol.pdf')
+        with self.assertRaisesRegex(ValueError,'soluzioni'):self.store.course_scope_material(self.sid,solution['id'])
+        other=self.view['session']['id']
+        with self.assertRaises(ValueError):self.store.course_scope_material(other,training['id'])
+
+    def test_full_exam_remains_readable_for_partial_objective(self):
+        self.start()
+        training=next(d for d in self.store.course_inventory(self.course)['documents'] if d['title']=='PC-1st-part-25-06-19.pdf')
+        # Explicit full-exam label must not be treated as a different partial.
+        self.store.db.execute('UPDATE documents SET path=? WHERE id=?',('corsi/'+self.course+'/materiali/Exams/full-exam.pdf',training['id']))
+        self.store.db.execute("UPDATE prep_spans SET status='outside',reason='Tema di un diverso parziale' WHERE path=?",(self.path,));self.store.db.commit()
+        self.store.course_sync(self.path)
+        statuses=[r[0] for r in self.store.db.execute('SELECT s.status FROM prep_spans s JOIN passages p ON p.id=s.source WHERE s.path=? AND p.document=?',(self.path,training['id']))]
+        self.assertTrue(statuses);self.assertNotIn('outside',statuses)
+        self.assertEqual(self.task()['kind'],'exam_reading')
+
+    def test_mixed_exam_profile_keeps_only_relevant_questions(self):
+        self.start();task=self.task();refs=[task['sources'][0]['id']]
+        self.commit(task,{'evidence':[{'concept':'PRAM','statement':'Concurrent accesses are part of the PRAM question.','sources':refs}], 'questions':[
+            {'text':'What is the difference between EREW, CREW, and CRCW models?','format':'open','in_scope':True,'skills':['PRAM'],'sources':refs},
+            {'text':'Provide an example for each of them.','format':'open','in_scope':False,'scope_reason':'Subquestion outside the selected practice scope','skills':['excluded'],'sources':refs}]})
+        profile=self.store.course_exam_profile(self.path)
+        self.assertEqual(profile['total'],1);self.assertEqual(profile['excluded_total'],1)
+        self.assertNotIn('excluded',profile['skills'])
+
     def test_full_pipeline_exams_first_and_two_complete_reviews_before_publish(self):
         chapter=self.to_chapter();content=self.content();self.commit(chapter,content)
         self.assertIsNone(self.store._chapter(self.path,'pram'))

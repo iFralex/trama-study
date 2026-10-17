@@ -42,6 +42,7 @@ app.post('/api/paths',run(async(req,res)=>res.json(await bridge.call('course_cre
 app.get('/api/paths/:path',run(async(req,res)=>res.json(await bridge.call('course_path_view',{path:req.params.path,sid:req.query.sid||undefined}))));
 app.post('/api/paths/:path/run',run(async(req,res)=>res.json(await courseEngine.start(req.params.path))));
 app.post('/api/paths/:path/pause',run(async(req,res)=>res.json(await courseEngine.pause(req.params.path))));
+app.post('/api/paths/:path/scope-followup',run(async(req,res)=>{await courseEngine.pause(req.params.path);res.json(await bridge.call('preparation_scope_followup',{path:req.params.path,note:req.body.note}));}));
 app.post('/api/paths/:path/confirm',run(async(req,res)=>res.json(await bridge.call('course_confirm',{path:req.params.path,...req.body}))));
 app.post('/api/paths/:path/restart',run(async(req,res)=>{await courseEngine.pause(req.params.path);res.json(await bridge.call('preparation_restart',{path:req.params.path}));}));
 app.post('/api/paths/:path/selection',run(async(req,res)=>{await courseEngine.pause(req.params.path);res.json(await bridge.call('preparation_decide',{path:req.params.path,...req.body}));}));

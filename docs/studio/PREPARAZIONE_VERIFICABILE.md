@@ -58,3 +58,11 @@ Test Python coprono il percorso completo, protezioni, alias, ledger delle lettur
 `npm run verify:preparation` prepara localmente 30 quesiti e 20 decisioni sintetiche annotate. `-- --send --compare` chiama il provider selezionato confrontando richieste brevi e ampie; i risultati non creano progressi personali. Questo campione misura regressioni semantiche, non certifica il programma reale o le prestazioni dello studente.
 
 La verifica didattica richiede ancora spiegazioni reali controllate, una sessione dello studente e una prova differita su problemi nuovi. Le prove tecniche e la revisione AI non sostituiscono queste evidenze.
+
+### Chiarimenti sul perimetro e prove complete
+
+La ricognizione può cercare e leggere slide, trascrizioni e notebook originali per ricostruire i confini, e anche i quesiti storici non riservati, attraverso lo stesso lettore con filtri delle altre fasi. Le soluzioni restano escluse. Prima di chiedere un confine allo studente, confronta programma, calendario e primi/secondi parziali pertinenti, con riferimenti verificabili. Una ricorrenza è evidenza di inclusione storica; un’assenza non dimostra esclusione dal programma attuale.
+
+Due PDF «I part» e «II part» dello stesso appello sono due tracce di parti distinte: la data dell’appello non li rende due esami completi. Una prova completa unica rimane leggibile durante la preparazione del parziale: il profilo usa soltanto i quesiti/sottopunti pertinenti. Le parti inseparabili o dubbie vengono segnalate ed escluse dalle statistiche pertinenti, senza inventare un quesito autentico ridotto.
+
+Nella scheda del perimetro, **Chiedi una verifica sulle fonti** conserva la bozza e permette una nuova ricognizione. Le indicazioni vengono salvate nell’obiettivo, conservando i risultati precedenti nello storico dei compiti e le riserve scelte. Il nuovo perimetro resta da confermare; questa azione non conferma o amplia silenziosamente l’esame. API: `POST /api/paths/:path/scope-followup` con `{note}`; disponibile solo nei nuovi percorsi non archiviati e non confermati.

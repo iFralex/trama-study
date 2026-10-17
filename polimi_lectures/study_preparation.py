@@ -9,7 +9,7 @@ import subprocess
 from collections import Counter
 from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles
 
-VERSION='selective-2.0'
+VERSION='selective-2.1'
 STATUSES={'relevant','prerequisite','outside','uncertain'}
 
 def digest(value):return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -74,6 +74,31 @@ class PreparationStudy:
         self._reservation_owner=path
         try:return super().course_confirm(path,summary,included,excluded,reserved)
         finally:self._reservation_owner=None
+
+    def preparation_scope_followup(self,path,note):
+        p=self._path(path);o=dict(p['objective'])
+        if not self._v2(path) or o.get('archived') or o.get('confirmed'):
+            raise ValueError('Il chiarimento è disponibile solo prima della conferma del nuovo percorso.')
+        if not isinstance(note,str) or not 3<=len(note.strip())<=3000:
+            raise ValueError('Specifica un chiarimento fra 3 e 3000 caratteri.')
+        o['scope_followups']=[*o.get('scope_followups',[]),note.strip()]
+        if len(pack(o['scope_followups']))>12000:raise ValueError('Troppi chiarimenti: sintetizza il perimetro.')
+        o['clarification']=None
+        with self.db:
+            self.db.execute('UPDATE course_paths SET objective=?,status=?,error=NULL,updated=? WHERE id=?',(pack(o),'scope',stamp(),path))
+        return self.course_path_view(path)
+
+    def course_scope_material(self,sid,document,start=1,end=100):
+        # Scope may inspect historical questions, but uses the same redaction and
+        # exposure policy as every other reader. Never bypass protected spans.
+        link=self._path_for_session(sid)
+        if link and self._v2(link['path']):
+            course=self.session(sid)['course']
+            row=self.db.execute('SELECT path FROM documents WHERE id=? AND course=?',(document,course)).fetchone()
+            if row:
+                if exam_family(row['path'])!=row['path']:raise ValueError('Per definire il perimetro leggi i quesiti, non le soluzioni.')
+                return self.read_material(sid,document,start,end)
+        return super().course_scope_material(sid,document,start,end)
 
     def course_unlock(self,path,document):
         p=self._path(path);row=self.db.execute('SELECT path FROM documents WHERE id=? AND course=?',(document,p['course'])).fetchone()
@@ -253,11 +278,15 @@ class PreparationStudy:
                 for row in self.db.execute("SELECT * FROM passages WHERE document=? AND kind!='alignment' AND reserved=0 ORDER BY COALESCE(page,start,0),rowid",(d['id'],)).fetchall():
                     try:self.source(row['id'],allow_solutions=False)
                     except ValueError:continue
-                    present.add(row['id']);old=self.db.execute('SELECT fingerprint FROM prep_spans WHERE path=? AND source=?',(path,row['id'])).fetchone()
+                    present.add(row['id']);old=self.db.execute('SELECT fingerprint,status,reason FROM prep_spans WHERE path=? AND source=?',(path,row['id'])).fetchone()
                     fingerprint=digest([d['fingerprint'],self.source(row['id'],allow_solutions=False)['text']])
-                    if old and old[0]==fingerprint:continue
+                    paper_type=exam_type(d['title'])
+                    incompatible=d['exam'] and target and target.startswith('part:') and paper_type and paper_type.startswith('part:') and target!=paper_type
+                    if old and old[0]==fingerprint:
+                        if d['exam'] and not incompatible and old['status']=='outside' and old['reason']=='Tema di un diverso parziale':
+                            self.db.execute("UPDATE prep_spans SET status='relevant',reason='Prova da valutare per singoli quesiti',selected=1,done=0,cursor=0 WHERE path=? AND source=?",(path,row['id']))
+                        continue
                     changed|=bool(old)
-                    incompatible=d['exam'] and target and exam_type(d['title']) and target!=exam_type(d['title'])
                     status='outside' if incompatible else ('relevant' if d['exam'] else 'unreviewed')
                     self.db.execute('INSERT OR REPLACE INTO prep_spans VALUES(?,?,?,?,?,?,?,0,0)',(path,row['id'],fingerprint,status,'Tema di un diverso parziale' if incompatible else 'Da valutare',pack([]),int(bool(incompatible or d['exam']))))
             for r in self.db.execute('SELECT source FROM prep_spans WHERE path=?',(path,)).fetchall():

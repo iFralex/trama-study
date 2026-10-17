@@ -112,3 +112,11 @@ Rimangono verifiche umane e temporali: correttezza didattica dei capitoli reali 
 
 
 Attivazione locale: commit `0ca6924`, servizio aggiornato sulla porta 4326, backup SQLite consistente prima della migrazione. Verificati integrità SQLite, conteggi storici conservati e modello configurato invariato. Il vecchio percorso è archiviato; il nuovo ha zero evidenze/piani ereditati. La prima ricognizione reale con il provider configurato è terminata senza errore e chiede conferma del confine del primo parziale (inclusione di Memory consistency & synchronization e OpenMP part 1 secondo il calendario). La lettura approfondita resta in attesa di questa risposta; nessun confine è assunto silenziosamente.
+
+### Verifica del perimetro con gli esami storici — 17 ottobre 2026
+
+Motore `selective-2.1`: ricognizione su quesiti storici e materiali disciplinari originali non riservati; chiarimenti dello studente persistenti e nuova ricognizione prima della conferma. I PDF di prima/seconda parte degli appelli ordinari non vengono equiparati automaticamente a prove complete. Le prove complete rimangono analizzabili per quesito anche per un obiettivo parziale. Vengono riaperte le sole esclusioni automatiche obsolete, conservando quelle manuali.
+
+Verifiche: 71 test Python, 19 test TypeScript/Pi e i 3 flussi Playwright della preparazione superati; typecheck/build riusciti. Test aggiunti per protezione delle riserve/soluzioni nella ricognizione, lettura delle slide, riapertura del perimetro senza conferma, prova completa non esclusa, filtraggio del profilo per quesito, bozza accessibile persistente e provider non disponibile. Il primo test browser ha individuato l’etichetta implicita di una textarea che inglobava il testo della bozza: corretta con etichetta esplicita separata e verificata dopo ricaricamento.
+
+Prima dell’attivazione è stato eseguito un backup SQLite locale. Nella ricognizione reale i precedenti non riservati confermano la presenza storica della memory consistency e di OpenMP nella prima parte. Queste evidenze non dimostrano da sole il confine dettagliato dei costrutti OpenMP del programma corrente: viene completato il confronto con calendario, slide e notebook. Le prove riservate restano protette e il perimetro aggiornato richiede conferma.

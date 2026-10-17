@@ -31,3 +31,27 @@ test('archived outputs are marked and a student clarification remains stored aft
   const paths=await (await request.get('/api/courses/'+course+'/paths')).json();const active=paths.find((p:any)=>!p.objective.archived);
   const detail=await (await request.get('/api/paths/'+active.id)).json();expect(detail.preparation.issues[0].data.student_note).toContain('numero dei processori');
 });
+
+test('scope followup keeps its draft and reopens source verification without confirming the objective',async({page,request})=>{
+  const response=await request.post('/api/paths',{data:{course,request:'Primo parziale: verifica argomenti dubbi',reserved:[]}});
+  expect(response.ok()).toBeTruthy();const fresh=await response.json();let submitted=false;
+  await page.route('**/api/paths/'+fresh.id,async route=>{
+    const result=await route.fetch();const data=await result.json();
+    if(!submitted){data.status='clarification';data.objective.clarification='OpenMP incluso?';data.objective.summary='Confine da verificare';data.objective.included=['PRAM'];}
+    await route.fulfill({response:result,json:data});
+  });
+  await page.goto('/');await page.locator('.course-label select').selectOption(course);
+  await page.getByRole('button',{name:'Corso personale',exact:true}).click();
+  await page.getByRole('combobox',{name:'Percorso',exact:true}).selectOption(fresh.id);
+  const input=page.getByLabel('Indicazioni per il tutor',{exact:true});
+  await input.fill('Controlla i parziali precedenti e i singoli quesiti delle prove complete.');
+  await page.reload();await page.getByRole('button',{name:'Corso personale',exact:true}).click();
+  await expect(input).toHaveValue('Controlla i parziali precedenti e i singoli quesiti delle prove complete.',{timeout:15000});
+  const sent=page.waitForResponse(r=>r.url().endsWith('/scope-followup')&&r.request().method()==='POST');
+  submitted=true;await page.getByRole('button',{name:'Verifica e aggiorna il perimetro',exact:true}).click();
+  expect((await sent).ok()).toBeTruthy();
+  await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
+  const saved=await (await request.get('/api/paths/'+fresh.id)).json();
+  expect(saved.objective.confirmed).toBe(false);expect(saved.objective.scope_followups[0]).toContain('singoli quesiti');
+  expect(saved.objective.reserved_requested).toEqual([]);
+});
