@@ -1,0 +1,63 @@
+{
+  "notice": "Small hand-annotated technical regression sample; not evidence of mastery or full-course authoring quality.",
+  "cases": [
+    {
+      "id": "amdahl",
+      "prompt": "Amdahl: serial fraction 0.1, 8 processors. Give speedup as number.",
+      "expected": 4.705882352941177
+    },
+    {
+      "id": "gustafson",
+      "prompt": "Gustafson: measured serial fraction 0.1 at 8 processors. Give scaled speedup.",
+      "expected": 7.3
+    },
+    {
+      "id": "reduction_depth",
+      "prompt": "Binary balanced sum reduction of 8 inputs, one level per synchronous round. Number of rounds?",
+      "expected": 3
+    },
+    {
+      "id": "reduction_work",
+      "prompt": "Binary sum reduction of 8 inputs, count only binary additions. Total additions?",
+      "expected": 7
+    },
+    {
+      "id": "prefix",
+      "prompt": "Inclusive prefix sum of [3,-1,4,0]. Return the full array.",
+      "expected": [
+        3,
+        2,
+        6,
+        6
+      ]
+    },
+    {
+      "id": "erew",
+      "prompt": "On EREW PRAM two processors read the same memory cell in the same round. Is this allowed? Boolean.",
+      "expected": false
+    },
+    {
+      "id": "crcw",
+      "prompt": "CRCW processors concurrently write different values to one cell, but no conflict policy is specified. Is the final value uniquely determined? Boolean.",
+      "expected": false
+    },
+    {
+      "id": "barrier",
+      "prompt": "CUDA: __syncthreads() is reached only by threadIdx.x < 16 in a block of 32 active threads. Is this a safe block-wide synchronization? Boolean.",
+      "expected": false
+    },
+    {
+      "id": "ram",
+      "prompt": "Scan n>=1 integers for the maximum on unit-cost RAM. Return worst-case time and extra space using {time:\"linear\"|\"constant\",space:\"linear\"|\"constant\"}.",
+      "expected": {
+        "time": "linear",
+        "space": "constant"
+      }
+    },
+    {
+      "id": "step",
+      "prompt": "A synchronous parallel scan step reads an immutable snapshot of the previous step. May it instead use unordered in-place writes while claiming the identical synchronous semantics? Boolean.",
+      "expected": false
+    }
+  ]
+}

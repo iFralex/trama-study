@@ -11,7 +11,8 @@
     "verify:sources": "tsx server/verify-sources.ts",
     "verify:embeddings": "tsx server/verify-embeddings.ts",
     "verify:curriculum": "tsx server/verify-curriculum.ts",
-    "verify:preparation": "tsx server/verify-preparation.ts"
+    "verify:preparation": "tsx server/verify-preparation.ts",
+    "compare:models": "tsx server/compare-study-models.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.29",
