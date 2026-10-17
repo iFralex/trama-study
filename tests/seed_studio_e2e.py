@@ -18,7 +18,7 @@ def seed(root):
     course='curriculum-fixture-2026';shutil.copytree(root/'corsi'/'a-course-2025-26',root/'corsi'/course)
     store.import_course(course)
     inventory=store.course_inventory(course);held=next(d['id'] for d in inventory['documents'] if d['title']=='PC-1st-part-25-07-21.pdf')
-    p=store.course_create(course,'Primo parziale di test: PRAM',reserved=[held]);pid=p['id'];sid=p['sid']
+    p=store.course_create(course,engine=1,request='Primo parziale di test: PRAM',reserved=[held]);pid=p['id'];sid=p['sid']
     source=next(r[0] for r in store.db.execute("SELECT id FROM passages WHERE course=? AND title='lecture.pdf'",(course,)))
     task=store.course_task(pid);store.course_commit(pid,task,{'summary':'Primo parziale di test: PRAM','included':['PRAM','riduzione'],'excluded':['secondo parziale'],'clarification':None});store.course_confirm(pid)
     while True:

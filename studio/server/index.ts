@@ -43,6 +43,9 @@ app.get('/api/paths/:path',run(async(req,res)=>res.json(await bridge.call('cours
 app.post('/api/paths/:path/run',run(async(req,res)=>res.json(await courseEngine.start(req.params.path))));
 app.post('/api/paths/:path/pause',run(async(req,res)=>res.json(await courseEngine.pause(req.params.path))));
 app.post('/api/paths/:path/confirm',run(async(req,res)=>res.json(await bridge.call('course_confirm',{path:req.params.path,...req.body}))));
+app.post('/api/paths/:path/restart',run(async(req,res)=>{await courseEngine.pause(req.params.path);res.json(await bridge.call('preparation_restart',{path:req.params.path}));}));
+app.post('/api/paths/:path/selection',run(async(req,res)=>{await courseEngine.pause(req.params.path);res.json(await bridge.call('preparation_decide',{path:req.params.path,...req.body}));}));
+app.post('/api/paths/:path/issues/:issue',run(async(req,res)=>res.json(await bridge.call('preparation_issue',{path:req.params.path,issue:req.params.issue,note:req.body.note}))));
 app.post('/api/paths/:path/recall',run(async(req,res)=>res.json(await courseEngine.recall(req.params.path,req.body.chapter))));
 app.post('/api/sessions/:sid/recall/exit',run(async(req,res)=>res.json(await bridge.call('course_exit_recall',{sid:req.params.sid}))));
 app.post('/api/paths/:path/open',run(async(req,res)=>res.json(await bridge.call('course_open',{...req.body,path:req.params.path}))));
@@ -79,6 +82,7 @@ app.get('/api/sessions/:sid/media/:id',run(async(req,res)=>{
   if(!file.startsWith(path.resolve(root)+path.sep))throw Error('Percorso non ammesso.');
   if(source.kind==='video'||source.kind==='alignment')file=path.resolve(file,'../../video.mp4');
   if(!['pdf','video','alignment'].includes(source.kind))throw Error('Apri la cella nel pannello fonti.');
+  if(source.partial_protection&&source.kind==='pdf')throw Error('Documento con quesiti riservati: usa il testo filtrato e le pagine consentite.');
   if(!existsSync(file))throw Error('File non disponibile: collega il disco dati.');
   res.sendFile(file,{headers:{'Content-Security-Policy':"frame-ancestors 'self'"}});
 }));

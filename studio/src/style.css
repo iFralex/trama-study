@@ -44,3 +44,9 @@ main:has(>.study-layout.inline){display:flex;flex-direction:column;min-height:10
 .course-block:has(.activity-card.expanded){position:fixed;inset:95px 35px 35px 265px;overflow:auto;z-index:12;background:var(--paper);padding:25px;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 60px #0005}@media(max-width:850px){.course-block:has(.activity-card.expanded){inset:90px 12px 12px 85px}}
 
 @media(min-width:851px){.course-workspace{height:calc(100dvh - 360px);min-height:360px}}
+
+.preparation-progress{margin:1rem 0;padding:1rem;border:1px solid var(--study-line);border-radius:14px;background:var(--study-bg)}
+.preparation-progress h2{margin:.4rem 0;font-size:1.15rem}.preparation-source-group{padding:.7rem 0;border-bottom:1px solid var(--study-line)}
+.preparation-source-group article{padding:.5rem 0}.preparation-decision{display:grid;grid-template-columns:minmax(8rem,auto) minmax(9rem,auto) 1fr;gap:.5rem;align-items:center;padding:.6rem 0;border-top:1px solid var(--study-line)}
+.preparation-decision p{margin:0}.preparation-decision small{grid-column:1/-1}.preparation-decision select{max-width:100%}
+@media(max-width:800px){.preparation-decision{grid-template-columns:1fr}.preparation-source-group summary{overflow-wrap:anywhere}}

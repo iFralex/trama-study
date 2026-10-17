@@ -1,5 +1,7 @@
 # Corso personale
 
+> Il motore corrente è descritto in [Preparazione verificabile](PREPARAZIONE_VERIFICABILE.md). Le sezioni sulla preparazione a blocchi qui sotto documentano il motore precedente, conservato per gli archivi; non vengono riusate nella nuova preparazione.
+
 Apri **Corso personale** o **Crea o riprendi il piano del corso**. L’ultima vista e il corso vengono ricordati. I percorsi precedenti, comprese chat e attività della versione iniziale, restano nelle Sessioni.
 
 ## Avvio

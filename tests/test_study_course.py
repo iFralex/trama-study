@@ -12,7 +12,7 @@ class CourseTest(unittest.TestCase):
     def start(self):
         inv=self.store.course_inventory(self.course)
         held=next(d['id'] for d in inv['documents'] if d['title']=='PC-1st-part-25-07-21.pdf')
-        self.path=self.store.course_create(self.course,'Primo parziale: PRAM e prefix sum',reserved=[held])['id']
+        self.path=self.store.course_create(self.course,engine=1,request='Primo parziale: PRAM e prefix sum',reserved=[held])['id']
         self.sid=self.store.course_path_view(self.path)['sid'];self.held=held
         task=self.store.course_task(self.path)
         self.store.course_commit(self.path,task,{'summary':'Primo parziale','included':['PRAM','prefix sum'],'excluded':['Secondo parziale'],'clarification':None})
@@ -48,7 +48,7 @@ class CourseTest(unittest.TestCase):
 
     def test_no_holdouts_are_preselected_without_an_objective(self):
         self.assertEqual(self.store.course_inventory(self.course)['proposed'],[])
-        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id']
+        path=self.store.course_create(self.course,engine=1,request='Primo parziale: PRAM')['id']
         self.assertEqual(self.store.course_path_view(path)['objective']['reserved'],[])
 
     def test_reservation_candidates_match_the_requested_partial(self):
@@ -61,7 +61,7 @@ class CourseTest(unittest.TestCase):
         with self.store.db:
             self.store.db.execute("UPDATE documents SET path='Exams/PC-2nd-part-25-06-19.pdf' WHERE id=?",(held,))
         self.assertEqual(self.store._reservation_candidates(self.course,{'request':'esame completo'}),[])
-        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id']
+        path=self.store.course_create(self.course,engine=1,request='Primo parziale: PRAM')['id']
         task=self.store.course_task(path)
         self.assertNotIn(held,[d['id'] for d in task['reservation_candidates']])
         result={'summary':'Primo parziale','included':['PRAM'],'excluded':['Secondo parziale'],'clarification':None,'recommended_reservations':[{'document':held,'reason':'Contiene PRAM'}]}
@@ -73,7 +73,7 @@ class CourseTest(unittest.TestCase):
         inventory=self.store.course_inventory(self.course)['documents']
         exposed=next(d['id'] for d in inventory if d['exam'])
         with self.store.db:self.store.db.execute('INSERT INTO course_exposure VALUES(?,?,?)',(self.course,exposed,'2026-10-17'))
-        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id'];task=self.store.course_task(path)
+        path=self.store.course_create(self.course,engine=1,request='Primo parziale: PRAM')['id'];task=self.store.course_task(path)
         for did in [exposed,next(d['id'] for d in inventory if not d['exam'] and not d['solution'])]:
             with self.assertRaises(ValueError):self.store.course_commit(path,task,{'summary':'Primo parziale','included':['PRAM'],'excluded':[],'clarification':None,'recommended_reservations':[{'document':did,'reason':'Una motivazione'}]})
 
@@ -81,7 +81,7 @@ class CourseTest(unittest.TestCase):
         self.start();p=self.store.course_path_view(self.path)
         self.assertEqual(p['objective']['request'],'Primo parziale: PRAM e prefix sum')
         self.assertTrue(p['objective']['confirmed']);self.assertTrue(self.store.course_task(self.path)['chunks'])
-        other=self.store.course_create(self.course,'Esame completo di un altro programma',reserved=[])['id']
+        other=self.store.course_create(self.course,engine=1,request='Esame completo di un altro programma',reserved=[])['id']
         self.assertEqual(self.store.course_task(other)['kind'],'scope')
         self.assertFalse(self.store.db.execute('SELECT 1 FROM course_units WHERE path=?',(other,)).fetchone())
 
@@ -265,7 +265,7 @@ class CourseTest(unittest.TestCase):
         q={'text':'Describe a second-part pattern','format':'open','in_scope':False,'skills':['Patterns'],'sources':refs,'points':1}
         self.store.course_commit(self.path,task,{'summary':'Fuori perimetro','sources':refs,'questions':[q]})
         profile=self.store.course_exam_profile(self.path)
-        self.assertEqual(profile['total'],0);self.assertEqual(profile['excluded_total'],1)
+        self.assertEqual(profile['total'],0);self.assertEqual(profile['excluded_total'],0)  # A classroom question is not an exam occurrence.
 
     def test_compatible_chapter_update_preserves_draft_and_old_activity_version(self):
         self.prepare();a=self.store.view(self.sid)['activities'][0]

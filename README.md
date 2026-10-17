@@ -328,3 +328,5 @@ blocchi (predefinita 300). Non cancellare sessioni/ se vuoi mantenere la ripresa
 ## Studio interattivo
 
 Apri **Studio.command** oppure scegli **5) Apri Studio** da Avvia.command. Tutor Pi, attività HTML nella chat, laboratorio PRAM, fonti e ripassi. Configura il provider in **Modello e accesso**. [Guida e limiti](docs/studio/README.md).
+
+Il motore di studio aggiornato è documentato in [Preparazione dalle fonti originali](docs/studio/PREPARAZIONE_VERIFICABILE.md).

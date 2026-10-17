@@ -51,7 +51,7 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     const runtime=await ModelRuntime.create({authPath:path.join(root,'auth.json'),modelsPath:null,refreshOnCreate:false});
     runtime.registerProvider('course-test',{name:'Test',api:'openai-completions',baseUrl:`http://127.0.0.1:${(server.address() as any).port}/v1`,apiKey:'test',models:[{id:'test',name:'Test',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:64000,maxTokens:4000}]});
     const tutor=new Tutor(bridge,path.join(root,'.state/studio'));tutor.runtime=runtime;
-    const p=await bridge.call('course_create',{course,request:'Primo parziale: PRAM, dalle basi',reserved:[held]});
+    const p=await bridge.call('course_create',{course,engine:1,request:'Primo parziale: PRAM, dalle basi',reserved:[held]});
     engine=new CourseEngine(bridge,tutor);await engine.start(p.id);await idle(engine,p.id);
     assert.equal((await bridge.call('course_path_view',{path:p.id})).status,'confirm');
     await bridge.call('course_confirm',{path:p.id});await engine.start(p.id);await idle(engine,p.id);

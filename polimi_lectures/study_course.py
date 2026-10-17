@@ -376,7 +376,7 @@ class CourseStudy:
             self.db.execute('UPDATE course_paths SET error=NULL,updated=? WHERE id=?',(stamp(),path))
         return self.course_path_view(path)
 
-    def _save_chapter(self,path,chapter,content):
+    def _validate_chapter_content(self,path,chapter,content):
         p=self._path(path);plan=self._plan(path);blueprint=next((c for c in plan['data']['chapters'] if c['id']==chapter),None)
         if not blueprint:raise ValueError('Capitolo non presente nel piano.')
         blocks=content.get('blocks',[])
@@ -402,6 +402,10 @@ class CourseStudy:
                     try:float(spec['answer'])
                     except (ValueError,TypeError,KeyError):raise ValueError('Risposta numerica mancante.')
                 if spec['kind']=='html' and not all(spec.get(k) for k in ('html','fallback','model')):raise ValueError('HTML richiede modello dichiarato e alternativa testuale.')
+        return dependencies
+
+    def _save_chapter(self,path,chapter,content):
+        dependencies=self._validate_chapter_content(path,chapter,content)
         previous=self._chapter(path,chapter);version=previous['version']+1 if previous else 1
         with self.db:self.db.execute('INSERT INTO course_chapters VALUES(?,?,?,?,?,?)',(path,chapter,version,pack(content),pack(dependencies),stamp()))
         return version

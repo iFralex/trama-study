@@ -1,0 +1,654 @@
+{
+  "notice": "Hand-authored synthetic annotations: semantic regression sample, not real exam validation.",
+  "scope": {
+    "included": [
+      "PRAM and prefix sum",
+      "Amdahl/Gustafson",
+      "SIMD",
+      "CUDA/GPU",
+      "DRAM and coalescing",
+      "basic synchronization and introductory OpenMP",
+      "performance metrics, elapsed time versus total CPU time"
+    ],
+    "excluded": [
+      "Pack parallel pattern",
+      "Halide",
+      "HLS/FPGA",
+      "multi-GPU"
+    ],
+    "prerequisites": [
+      "C loops/arrays",
+      "asymptotic notation",
+      "matrix notation",
+      "Boolean predicates"
+    ]
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "text": "Define the EREW PRAM model.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q02",
+      "text": "Write pseudocode for a parallel binary reduction.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "code",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q03",
+      "text": "With n=16 values, how many binary reduction levels are required? Give only the number.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "numeric",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q04",
+      "text": "Which model allows concurrent reads? A. CREW B. EREW",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [
+        "CREW",
+        "EREW"
+      ],
+      "expected": {
+        "origin": "exam",
+        "format": "choice",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q05",
+      "text": "Explain the assumptions of Amdahl’s law.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q06",
+      "text": "For parallel fraction 0.9 and two processors, calculate the ideal speedup.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "numeric",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q07",
+      "text": "Write a CUDA kernel adding two arrays.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "code",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q08",
+      "text": "Explain the difference between coalesced and uncoalesced accesses.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q09",
+      "text": "Select the serial fraction used in Gustafson’s normalization: A. Fraction of parallel elapsed time B. Fraction of the original serial run.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [
+        "Fraction of parallel elapsed time",
+        "Fraction of the original serial run"
+      ],
+      "expected": {
+        "origin": "exam",
+        "format": "choice",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q10",
+      "text": "Write an OpenMP parallel-for directive for the following loop.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "code",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Calculate the ideal work and depth, and explain the processor allocation.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "mixed",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q12",
+      "text": "Explain SIMD divergence.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q13",
+      "text": "Write pseudocode and justify its PRAM access model.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "mixed",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q14",
+      "text": "Given 1024 bytes and bandwidth 256 bytes per second, compute transfer time.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "numeric",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q15",
+      "text": "Explain a synchronization barrier.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q16",
+      "text": "Which is an exclusive write? A. One writer per cell B. Any number of writers per cell",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "first",
+        "original_verified": true
+      },
+      "options": [
+        "One writer per cell",
+        "Any number of writers per cell"
+      ],
+      "expected": {
+        "origin": "exam",
+        "format": "choice",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q17",
+      "text": "Describe strong scaling.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "full",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q18",
+      "text": "Write code to avoid a race with an OpenMP reduction clause.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "full",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "code",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q19",
+      "text": "Implement the Pack parallel pattern.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "second",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "code",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q20",
+      "text": "Explain Halide scheduling.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "second",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q21",
+      "text": "Implement a multi-GPU pipeline and discuss partitioning.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "full",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "mixed",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q22",
+      "text": "Compute the latency of this FPGA pipeline.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "second",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "numeric",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q23",
+      "text": "Describe the HLS synthesis process.",
+      "provenance": {
+        "kind": "exam",
+        "assessment": "second",
+        "original_verified": true
+      },
+      "options": [],
+      "expected": {
+        "origin": "exam",
+        "format": "open",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q24",
+      "text": "Exercise assigned in class: calculate binary reduction depth for 32 values.",
+      "provenance": {
+        "kind": "assigned",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "assigned",
+        "format": "numeric",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q25",
+      "text": "The lecturer asks: why do we count operations?",
+      "provenance": {
+        "kind": "teacher_question",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "classroom",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q26",
+      "text": "AI-created exercise: write prefix sum pseudocode.",
+      "provenance": {
+        "kind": "generated",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "generated",
+        "format": "code",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q27",
+      "text": "The lecturer asks which time the plot displays: elapsed or total CPU time. No options are printed.",
+      "provenance": {
+        "kind": "teacher_question",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "classroom",
+        "format": "open",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q28",
+      "text": "Student results: total score 27, registration instructions follow.",
+      "provenance": {
+        "kind": "administrative",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "administrative",
+        "format": "unknown",
+        "scope": "out"
+      }
+    },
+    {
+      "id": "q29",
+      "text": "Official solution: the prefix sum result is [1,3,6]. No question text is present.",
+      "provenance": {
+        "kind": "solution",
+        "assessment": "first",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "solution",
+        "format": "unknown",
+        "scope": "in"
+      }
+    },
+    {
+      "id": "q30",
+      "text": "Explain the model. File provenance and subject are unavailable.",
+      "provenance": {
+        "kind": "unknown",
+        "assessment": "unknown",
+        "original_verified": false
+      },
+      "options": [],
+      "expected": {
+        "origin": "uncertain",
+        "format": "open",
+        "scope": "uncertain"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "s01",
+      "title": "lecture-PRAM",
+      "excerpt": "Defines EREW, CREW, CRCW and RAM cost assumptions.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s02",
+      "title": "Prefix sum under PRAM",
+      "excerpt": "Explains a CREW prefix sum algorithm, work and depth.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s03",
+      "title": "Scaling laws",
+      "excerpt": "Derives Amdahl and Gustafson with their distinct normalizations.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s04",
+      "title": "GPU architecture",
+      "excerpt": "Warps, SIMD execution, divergence and occupancy.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s05",
+      "title": "Memory access",
+      "excerpt": "DRAM bandwidth, latency and coalesced CUDA accesses.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s06",
+      "title": "OpenMP introduction",
+      "excerpt": "Basic parallel-for, reduction clause and barrier.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s07",
+      "title": "C notation refresher",
+      "excerpt": "Explains C array indexing and loops needed to read the course pseudocode.",
+      "expected": {
+        "status": "prerequisite"
+      }
+    },
+    {
+      "id": "s08",
+      "title": "Asymptotic notation refresher",
+      "excerpt": "Defines big-O, sums and logarithms used in algorithm analysis.",
+      "expected": {
+        "status": "prerequisite"
+      }
+    },
+    {
+      "id": "s09",
+      "title": "Matrix notation refresher",
+      "excerpt": "Defines rows, columns and matrix multiplication needed for the CUDA examples.",
+      "expected": {
+        "status": "prerequisite"
+      }
+    },
+    {
+      "id": "s10",
+      "title": "Boolean notation refresher",
+      "excerpt": "Defines AND/OR and predicates needed for PRAM conditionals.",
+      "expected": {
+        "status": "prerequisite"
+      }
+    },
+    {
+      "id": "s11",
+      "title": "Pack pattern",
+      "excerpt": "Second-part implementation and performance analysis of the Pack pattern.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s12",
+      "title": "Halide",
+      "excerpt": "Second-part Halide scheduling and DSL design.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s13",
+      "title": "HLS",
+      "excerpt": "High-level synthesis and FPGA implementation, explicitly excluded.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s14",
+      "title": "Multi-GPU",
+      "excerpt": "Partitioning computation across multiple GPUs, explicitly excluded.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s15",
+      "title": "Results",
+      "excerpt": "Named student exam results and registration notices.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s16",
+      "title": "CUDA.ipynb, cell 2",
+      "excerpt": "Vector addition CUDA kernel and memory coalescing exercise.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s17",
+      "title": "Mixed notebook, section HLS",
+      "excerpt": "This section only covers HLS, despite CUDA in another section of the notebook.",
+      "expected": {
+        "status": "outside"
+      }
+    },
+    {
+      "id": "s18",
+      "title": "December recording",
+      "excerpt": "The lecturer reviews first-part PRAM processor simulation lemmas; recording date is December.",
+      "expected": {
+        "status": "relevant"
+      }
+    },
+    {
+      "id": "s19",
+      "title": "September recording",
+      "excerpt": "The only excerpt says welcome and does not identify the topic or content of the rest of the recording.",
+      "expected": {
+        "status": "uncertain"
+      }
+    },
+    {
+      "id": "s20",
+      "title": "Damaged slide",
+      "excerpt": "OCR contains unreadable symbols and an unidentifiable diagram; no verified association is available.",
+      "expected": {
+        "status": "uncertain"
+      }
+    }
+  ],
+  "annotation_revision": 2,
+  "annotation_notes": [
+    "q30: formato aperto riconoscibile anche con origine e argomento incerti; corretto unknown in open dopo controllo del testo.",
+    "Perimetro esplicita metriche di prestazione e distinzione elapsed/CPU time, per evitare ambiguità in q27."
+  ]
+}

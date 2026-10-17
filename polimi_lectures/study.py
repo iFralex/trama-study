@@ -15,6 +15,7 @@ from pathlib import Path
 from .config import data_root, load_config
 from .study_beginner import BeginnerStudy
 from .study_course import CourseStudy
+from .study_preparation import PreparationStudy
 
 
 def now():
@@ -51,7 +52,7 @@ TRANSLATIONS={'riduzione':'reduction','parallela':'parallel','parallelo':'parall
  'somma':'sum','modelli':'models','accessi':'access'}
 
 
-class Study(BeginnerStudy, CourseStudy):
+class _StudyBase(BeginnerStudy, CourseStudy):
     def __init__(self, root, database=None):
         self.root = Path(root).resolve()
         if not self.root.is_dir():
@@ -85,6 +86,7 @@ class Study(BeginnerStudy, CourseStudy):
         self.db.commit()
         self.setup_beginner()
         self.setup_course_study()
+        self.setup_preparation()
 
     def courses(self):
         base = self.root / 'corsi'
@@ -468,7 +470,7 @@ class Study(BeginnerStudy, CourseStudy):
         for r in rows:
             spec=json.loads(r['spec'])
             # Answer keys and full solutions never appear in ordinary browser activity payloads.
-            public={k:v for k,v in spec.items() if k not in ('answer','solution','hints')}
+            public={k:v for k,v in spec.items() if k not in ('answer','solution','hints','verification')}
             activities.append({'id':r['id'],'version':r['version'],'spec':public,'state':json.loads(r['state']),'created':r['created']})
         messages=[dict(r) for r in self.db.execute('SELECT * FROM messages WHERE session=? ORDER BY rowid',(sid,))]
         attempts=[dict(r,answer=json.loads(r['answer']),grade=json.loads(r['grade'])) for r in self.db.execute('SELECT * FROM attempts WHERE session=? ORDER BY rowid',(sid,))]
@@ -776,10 +778,15 @@ class Study(BeginnerStudy, CourseStudy):
         return [dict(self.source(source),semantic_score=score) for source,score in sorted(best.items(),key=lambda x:x[1],reverse=True)[:max(1,min(int(limit),30))]]
 
     def dispatch(self,method,args):
-        allowed={'course_coverage','course_scope_material','course_cards','course_note_evidence','course_recalls','course_recall_card','course_create_recall','course_exit_recall','course_focus','course_expose','course_inventory','course_create','course_paths','course_path_view','course_context','course_confirm','course_sync','course_task','course_commit','course_exam_profile','course_status','course_open','course_select','course_position','course_detour','course_journal','course_note','course_correct_note','course_evidence','course_revise','course_undo','course_append','course_simulation','course_unlock','select_beginner_unit','course_lessons','lesson_bundle','beginner_context','set_lesson_plan','select_lesson','advance_beginner','beginner_recall','installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
+        allowed={'preparation_recover','preparation_usage','preparation_restart','preparation_catalog','preparation_begin','preparation_read','preparation_commit','preparation_metric','preparation_decisions','preparation_decide','preparation_evidence','preparation_issue','source_visual','course_coverage','course_scope_material','course_cards','course_note_evidence','course_recalls','course_recall_card','course_create_recall','course_exit_recall','course_focus','course_expose','course_inventory','course_create','course_paths','course_path_view','course_context','course_confirm','course_sync','course_task','course_commit','course_exam_profile','course_status','course_open','course_select','course_position','course_detour','course_journal','course_note','course_correct_note','course_evidence','course_revise','course_undo','course_append','course_simulation','course_unlock','select_beginner_unit','course_lessons','lesson_bundle','beginner_context','set_lesson_plan','select_lesson','advance_beginner','beginner_recall','installation_id','resume_session','web_pdf','list_materials','read_material','grep_materials','list_sessions','read_session','embedding_batch','save_embeddings','semantic_search','bootstrap','import_course','search','source','render_pdf','open_session','view','next','recall','event','message','create_activity','activity','context','assessment','assess','correct','review','setting','select_activity','preferences'}
         if method not in allowed:
             raise ValueError('Metodo non disponibile.')
         return getattr(self,method)(**args)
+
+
+class Study(PreparationStudy, _StudyBase):
+    """Public service: preparation policies wrap every legacy source access."""
+    pass
 
 
 def main():
