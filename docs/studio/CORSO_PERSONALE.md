@@ -45,6 +45,8 @@ L’importazione aggiorna solo le analisi dei documenti cambiati. La copertura d
 
 ## Esami e richiami
 
+Nessun tema è preselezionato nell’inventario o prima della definizione dell’obiettivo. Dopo la scheda, l’agente suggerisce fino a due prove dello stesso parziale/formato, motivando la pertinenza; se non può stabilirla, non propone quel tema. Il server esclude dai candidati i temi già esposti, duplicati o illeggibili e le etichette esplicite incompatibili (primo/secondo/terzo parziale, esame completo). Le etichette sconosciute richiedono verifica del modello: non vengono considerate automaticamente esami completi. La scelta finale resta modificabile nella conferma del perimetro.
+
 I temi riservati e le soluzioni associate sono esclusi da ricerca testuale, vettoriale, lettura dei file, schede del corso e profilo dell’esame. Lo storico che contiene una prova riservata non entra negli strumenti del tutor. Le riserve sono condivise tra gli obiettivi dello stesso corso, per evitare che un’altra sessione esponga una prova nuova.
 
 Il controllo locale raggruppa copie esatte e sovrapposizioni forti di pagine; non garantisce di riconoscere ogni parafrasi. Un tema usato nella preparazione, aperto o citato nelle conversazioni/attività note viene segnato come esposto. Le esposizioni esterne all’app non sono conoscibili automaticamente. Sbloccare un tema ne perde lo stato di prova nuova; le soluzioni della stessa famiglia vengono sbloccate insieme.

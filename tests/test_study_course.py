@@ -46,6 +46,37 @@ class CourseTest(unittest.TestCase):
         self.assertEqual(task['kind'],'chapter');self.store.course_commit(self.path,task,self.content())
         self.store.course_select(self.sid,'pram')
 
+    def test_no_holdouts_are_preselected_without_an_objective(self):
+        self.assertEqual(self.store.course_inventory(self.course)['proposed'],[])
+        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id']
+        self.assertEqual(self.store.course_path_view(path)['objective']['reserved'],[])
+
+    def test_reservation_candidates_match_the_requested_partial(self):
+        from polimi_lectures.study_course import exam_type
+        self.assertEqual(exam_type('primo parziale'),'part:1')
+        self.assertEqual(exam_type('PC-2nd-part-25-06-19.pdf'),'part:2')
+        self.assertEqual(exam_type('esame completo'),'full')
+        self.assertIsNone(exam_type('exam-2025.pdf'))
+        held=next(d['id'] for d in self.store.course_inventory(self.course)['documents'] if d['exam'])
+        with self.store.db:
+            self.store.db.execute("UPDATE documents SET path='Exams/PC-2nd-part-25-06-19.pdf' WHERE id=?",(held,))
+        self.assertEqual(self.store._reservation_candidates(self.course,{'request':'esame completo'}),[])
+        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id']
+        task=self.store.course_task(path)
+        self.assertNotIn(held,[d['id'] for d in task['reservation_candidates']])
+        result={'summary':'Primo parziale','included':['PRAM'],'excluded':['Secondo parziale'],'clarification':None,'recommended_reservations':[{'document':held,'reason':'Contiene PRAM'}]}
+        with self.assertRaises(ValueError):self.store.course_commit(path,task,result)
+        result['recommended_reservations']=[]
+        self.store.course_commit(path,task,result)
+
+    def test_exposed_or_non_exam_sources_cannot_be_recommended(self):
+        inventory=self.store.course_inventory(self.course)['documents']
+        exposed=next(d['id'] for d in inventory if d['exam'])
+        with self.store.db:self.store.db.execute('INSERT INTO course_exposure VALUES(?,?,?)',(self.course,exposed,'2026-10-17'))
+        path=self.store.course_create(self.course,'Primo parziale: PRAM')['id'];task=self.store.course_task(path)
+        for did in [exposed,next(d['id'] for d in inventory if not d['exam'] and not d['solution'])]:
+            with self.assertRaises(ValueError):self.store.course_commit(path,task,{'summary':'Primo parziale','included':['PRAM'],'excluded':[],'clarification':None,'recommended_reservations':[{'document':did,'reason':'Una motivazione'}]})
+
     def test_scope_requires_confirmation_and_keeps_general_request(self):
         self.start();p=self.store.course_path_view(self.path)
         self.assertEqual(p['objective']['request'],'Primo parziale: PRAM e prefix sum')

@@ -53,6 +53,8 @@ test('course answers survive provider failure and the journal keeps facts and co
 
 test('new exam scope is editable and a missing provider does not lose the request',async({page,request})=>{
   await enter(page);await page.getByRole('button',{name:'Nuovo obiettivo d’esame',exact:true}).click();
+  await expect(page.getByText('Nessun tema viene preselezionato prima di conoscere il tuo obiettivo.',{exact:false})).toBeVisible();
+  await expect(page.locator('.course-setup input[type=checkbox]')).toHaveCount(0);
   await page.getByLabel('Obiettivo e argomenti').fill('Esame completo: tutti gli argomenti, escluso il progetto.');
   await page.getByRole('button',{name:'Prepara la scheda dell’esame',exact:true}).click();
   await expect(page.getByText('I risultati già salvati restano disponibili.',{exact:false})).toBeVisible();
@@ -60,6 +62,7 @@ test('new exam scope is editable and a missing provider does not lose the reques
   expect(saved[0].objective.request).toContain('Esame completo');expect(saved[0].objective.confirmed).toBe(false);
   const detail=await (await request.get('/api/paths/'+saved[0].id)).json();
   expect(detail.coverage.every((d:any)=>d.total===0)).toBe(true);
+  expect(detail.objective.reserved_requested).toEqual([]);
 });
 
 test('a queued activity save never erases the next course chat draft',async({page})=>{

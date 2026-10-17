@@ -19,6 +19,15 @@ def is_exam(path):
     if re.search(r'(?:results|risultati|elenco|esiti)',path,re.I):return False
     return bool(re.search(r'(?:exams?|esami|temi|1st.part|2nd.part|mid.term|past.papers)',path,re.I))
 
+def exam_type(text):
+    """Recognise explicit assessment labels only; unknown is not a full exam."""
+    text=re.sub(r'[_/.-]+',' ',text.lower())
+    found=set()
+    for number,labels in [('1','primo|prima|first|1st'),('2','secondo|seconda|second|2nd'),('3','terzo|terza|third|3rd')]:
+        if re.search(r'\b(?:'+labels+r')\s+(?:parziale|parte|part|mid\s*term)\b|\b(?:parziale|parte|part)\s+'+number+r'\b',text):found.add('part:'+number)
+    if re.search(r'\b(?:esame\s+(?:intero|completo)|(?:full|complete)\s+exam)\b',text):found.add('full')
+    return next(iter(found)) if len(found)==1 else None
+
 def shingles(text):
     text=re.sub(r'[_\s]+',' ',text.lower())
     words=re.findall(r'[a-zÀ-ÿ]+|\d+',text)
@@ -88,9 +97,16 @@ class CourseStudy:
                 item['exposed']=bool(self.db.execute("""SELECT 1 FROM activities a JOIN sessions s ON s.id=a.session
                     WHERE s.course=? AND instr(a.spec,?)>0 LIMIT 1""",(course,r['id']+':')).fetchone())
             output.append(item)
-        exams=[r for r in output if r['exam'] and not r['exposed'] and not r['duplicate_of'] and not r['issue']]
-        proposed=[r['id'] for r in sorted(exams,key=lambda r:(not bool(r['reserved']),r['path']),reverse=False)[:2]]
+        # Inventory has no exam objective: it must never preselect holdouts.
+        proposed=[]
         return {'documents':output,'proposed':proposed,'warnings':['Le trascrizioni parziali e le associazioni candidate richiedono confronto con gli originali.'] if any('parziale' in (r['quality'] or '') for r in rows) else []}
+
+    def _reservation_candidates(self,course,objective):
+        target=exam_type(objective.get('request','')) or exam_type(objective.get('summary',''))
+        return [{'id':r['id'],'title':r['title'],'exam_type':exam_type(r['title'])}
+                for r in self.course_inventory(course)['documents']
+                if r['exam'] and not r['exposed'] and not r['duplicate_of'] and not r['issue']
+                and not (target and exam_type(r['title']) and target!=exam_type(r['title']))]
 
     def _reserve(self,course,documents):
         inventory=self.course_inventory(course)['documents'];byid={r['id']:r for r in inventory}
@@ -231,7 +247,7 @@ class CourseStudy:
 
     def course_task(self,path):
         p=self._path(path);o=p['objective']
-        if not o.get('confirmed'):return {'kind':'scope','objective':o,'course':p['course'],'reservation_candidates':[{'id':r['id'],'title':r['title'],'exposed':r['exposed']} for r in self.course_inventory(p['course'])['documents'] if r['exam']],'documents':[{'id':r['id'],'title':r['title'],'kind':r['kind'],'exam':r['exam']} for r in self.course_inventory(p['course'])['documents'] if not r['reserved'] and not r['solution']]}
+        if not o.get('confirmed'):return {'kind':'scope','objective':o,'course':p['course'],'reservation_candidates':self._reservation_candidates(p['course'],o),'documents':[{'id':r['id'],'title':r['title'],'kind':r['kind'],'exam':r['exam']} for r in self.course_inventory(p['course'])['documents'] if not r['reserved'] and not r['solution']]}
         self.course_sync(path)
         if not self.db.execute('SELECT 1 FROM course_documents WHERE path=?',(path,)).fetchone():raise ValueError('Nessuna fonte didattica utilizzabile: importa materiali leggibili o sblocca un tema.')
         unit=self.db.execute('SELECT * FROM course_units WHERE path=? AND card IS NULL ORDER BY rowid LIMIT 1',(path,)).fetchone()
@@ -301,7 +317,8 @@ class CourseStudy:
             required=['summary','included','excluded','clarification']
             if any(k not in result for k in required) or not isinstance(result['included'],list) or not isinstance(result['excluded'],list):raise ValueError('Scheda dell’obiettivo incompleta.')
             recommendations=result.get('recommended_reservations',[])
-            ids={r['id'] for r in self.course_inventory(p['course'])['documents'] if not r['solution']}
+            ids={r['id'] for r in self._reservation_candidates(p['course'],dict(p['objective'],summary=result['summary']))}
+            if result['clarification'] and recommendations:raise ValueError('Chiarisci il perimetro prima di suggerire temi riservati.')
             if not isinstance(recommendations,list) or len(recommendations)>2 or any(not isinstance(r,dict) or r.get('document') not in ids or not r.get('reason') for r in recommendations):raise ValueError('Suggerimenti sui temi riservati non validi.')
             o=dict(p['objective'],**{k:result[k] for k in required},recommended_reservations=recommendations)
             status='clarification' if result['clarification'] else 'confirm'
