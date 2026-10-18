@@ -286,12 +286,18 @@ class CourseStudy:
                 return {'kind':'chapter','objective':o,'chapter':c,'plan':plan,'profile':self.course_exam_profile(path),'diary':self.course_journal(p['course'],path=path,chapter=c['id'],limit=12),'preferences':self.course_journal(p['course'],kind='preference',limit=12),'sources':[self.source(s,allow_solutions=False) for s in c['sources'][:8]]}
         return {'kind':'done'}
 
-    def _validate_plan(self,path,data,previous=None,adaptive=False):
+    def _validate_plan(self,path,data,previous=None,adaptive=False,bibliography_budget=False):
         p=self._path(path);chapters=data.get('chapters',[])
         if not isinstance(chapters,list) or not 1<=len(chapters)<=80:raise ValueError('Il piano deve contenere da 1 a 80 capitoli.')
         ids=[str(c.get('id','')) for c in chapters]
         if any(not i or len(i)>100 for i in ids) or len(set(ids))!=len(ids):raise ValueError('Identità dei capitoli non valide.')
-        if len(pack(data))>130000:raise ValueError('Piano troppo grande: sintetizza le schede, conserva i dettagli nelle fonti.')
+        bounded=data
+        if bibliography_budget:
+            # Source unions are computed and checked by the service, not generated
+            # prose. Bound them separately so full provenance does not displace text.
+            if len(pack(data))>260000:raise ValueError('Piano e bibliografie troppo grandi: massimo 260000 caratteri.')
+            bounded=dict(data,chapters=[{k:v for k,v in c.items() if k not in ('sources','coverage')} for c in chapters])
+        if len(pack(bounded))>130000:raise ValueError('Piano troppo grande: sintetizza le schede, conserva i dettagli nelle fonti.')
         seen=set()
         for chapter_index,c in enumerate(chapters):
             if not c.get('title') or not c.get('objective') or not c.get('priority_reason') or not c.get('assessment'):raise ValueError('Ogni capitolo richiede titolo, obiettivo, priorità motivata e progetto degli esercizi.')

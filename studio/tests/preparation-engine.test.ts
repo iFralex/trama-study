@@ -78,6 +78,7 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     }
     const ready=await bridge.call('course_path_view',{path:p.id});assert.equal(ready.status,'ready',ready.error);
     assert.equal(ready.profile.total,1);assert.equal(ready.chapters[0].review.status,'reviewed');assert.equal(ready.current.content.blocks.length,3);
+    const reconciliationPayload=payloads.find(p=>JSON.stringify(p.messages).includes('reconciliation_version'));assert.ok(reconciliationPayload);assert.ok(!reconciliationPayload.tools?.length);assert.doesNotMatch(JSON.stringify(reconciliationPayload),/create_activity|read_material/);
     assert.ok(phases.includes('map_outline'));assert.ok(phases.includes('map_contribution'));assert.equal(phases.filter(p=>p==='map').length,1);
     const contribution=payloads.find(p=>JSON.stringify(p.messages).includes('evidence_ids'));assert.ok(!contribution.tools?.length);assert.doesNotMatch(JSON.stringify(contribution),/read_ranges|access_fingerprints/);
     assert.ok(phases.indexOf('exam_reading')<phases.indexOf('selection'));assert.ok(phases.indexOf('review_solve')<phases.indexOf('review_discipline'));assert.ok(phases.indexOf('review_discipline')<phases.indexOf('review_didactic'));

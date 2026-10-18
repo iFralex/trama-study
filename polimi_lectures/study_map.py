@@ -1,6 +1,7 @@
 """Incremental course mapping: persist additions, reconcile once, keep original evidence."""
 import copy
 import math
+import json
 from .study_course import pack,unpack,stamp
 
 STRATEGY='compact-map-1'
@@ -11,6 +12,25 @@ def compact_fact(claim):
 
 def outline(plan):
     return [{key:chapter[key] for key in ('id','title','objective','prerequisites','priority','priority_reason','assessment','exam_skills') if key in chapter} for chapter in (plan or {}).get('data',{}).get('chapters',[])]
+
+def recover_map_fields(text):
+    """Recover only fully decoded values; never repair truncated strings/objects."""
+    decoder=json.JSONDecoder();position=text.find('{')+1;fields={}
+    if position<=0:return None
+    while position<len(text):
+        while position<len(text) and (text[position].isspace() or text[position]==','):position+=1
+        try:
+            key,position=decoder.raw_decode(text,position)
+            while position<len(text) and text[position].isspace():position+=1
+            if text[position]!=':':break
+            position+=1
+            while position<len(text) and text[position].isspace():position+=1
+            value,end=decoder.raw_decode(text,position)
+        except (ValueError,IndexError):break
+        fields[key]=value;position=end
+    if not isinstance(fields.get('chapters'),list) or not fields['chapters']:return None
+    if not isinstance(fields.get('gaps'),list):return None
+    return {k:fields[k] for k in ('chapters','gaps','outside_scope') if k in fields}
 
 class MapStudy:
     def _map_setup(self):
@@ -78,7 +98,19 @@ class MapStudy:
             return self._prep_task(path,dict(base,kind='map_contribution',part=digest([c['id'] for c in batch]),outline=compact_outline,evidence=batch,evidence_ids=[c['id'] for c in batch],covered=len(covered),total=len(claims)))
         previous=self._plan(path)
         previous_notes={k:previous['data'][k] for k in ('gaps','outside_scope','coverage_notes','objective_coverage') if previous and k in previous['data']}
-        return self._prep_task(path,dict(base,kind='map',final_batch=True,outline=outline(previous) or chapters,previous_notes=previous_notes,contributions=[{'chapter':a['chapter'],'notes':a['notes'],'skills':a.get('skills',[])} for part in parts for a in part['additions']],review_feedback=(self._plan(path) or {}).get('data',{}).get('review_feedback'),selection=self._map_inventory(path),exam_profile=self._map_profile(path),evidence_count=len(claims),covered=len(covered)))
+        return self._prep_task(path,dict(base,kind='map',reconciliation_version=2,recovery=self._map_recovery(path,build,claims),final_batch=True,outline=outline(previous) or chapters,previous_notes=previous_notes,contributions=[{'chapter':a['chapter'],'notes':a['notes'],'skills':a.get('skills',[])} for part in parts for a in part['additions']],review_feedback=(self._plan(path) or {}).get('data',{}).get('review_feedback'),selection=self._map_inventory(path),exam_profile=self._map_profile(path),evidence_count=len(claims),covered=len(covered)))
+
+    def _map_recovery(self,path,build,claims):
+        for row in self.db.execute("SELECT c.id,c.data,c.task,t.input FROM prep_model_calls c JOIN prep_tasks t ON t.id=c.task WHERE t.path=? AND t.kind='map' AND t.state='error' ORDER BY c.rowid DESC LIMIT 3",(path,)):
+            old=unpack(row['input'])
+            if old.get('build')!=build or old.get('strategy')!=STRATEGY:continue
+            fields=recover_map_fields(unpack(row['data']).get('output',''))
+            if fields:
+                allowed={ref for fact in claims for ref in fact.get('sources',[])}
+                allowed.update(r[0] for r in self.db.execute('SELECT source FROM prep_reads WHERE task=?',(row['task'],)))
+                refs={ref for chapter in fields['chapters'] for ref in chapter.get('sources',[])}
+                if refs<=allowed:return {'call':row['id'],'fields':fields}
+        return None
 
     def _map_profile(self,path):
         profile=self.course_exam_profile(path)
@@ -131,7 +163,20 @@ class MapStudy:
                 for cid in a['evidence']:
                     for ref in byid[cid]['sources']:
                         chapter['sources'].add(ref);chapter['coverage'].add(self.source(ref,allow_solutions=False)['document'])
+        # Keep earlier caveats without spending output tokens copying them. The
+        # reconciler may explicitly refine an entry, but omission never erases it.
+        if len(pack(result))>24000:raise ValueError('Riconciliazione troppo lunga: massimo 24000 caratteri prima delle bibliografie; sintetizza il progetto, non scrivere i capitoli.')
         data=copy.deepcopy(result)
+        if task.get('recovery'):
+            if any(k in data for k in ('chapters','gaps')):raise ValueError('La continuazione deve restituire solo i campi mancanti, senza riscrivere chapters o gaps recuperati.')
+            recovered=copy.deepcopy(task['recovery']['fields'])
+            recovered.update(data);data=recovered
+            data['recovered_from_call']=task['recovery']['call']
+        previous_notes=task.get('previous_notes',{})
+        data['gaps']=list(dict.fromkeys(previous_notes.get('gaps',[])+data.get('gaps',[])))
+        exclusions={e['document']:e for e in previous_notes.get('outside_scope',[])}
+        exclusions.update({e['document']:e for e in data.get('outside_scope',[])})
+        data['outside_scope']=list(exclusions.values())
         ids={c['id'] for c in data.get('chapters',[])}
         if not {c['id'] for c in chapters}<=ids:raise ValueError('Conserva tutti i capitoli dell’indice e i relativi contributi.')
         selected_documents={r[0] for r in self.db.execute("SELECT DISTINCT p.document FROM prep_spans s JOIN passages p ON p.id=s.source WHERE s.path=? AND s.status!='outside'",(path,))}

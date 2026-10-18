@@ -609,7 +609,7 @@ class PreparationStudy(MapStudy):
             self._map_commit_part(path,task,result)
         elif kind=='map':
             if task.get('strategy')==STRATEGY:result=self._map_merge(path,task,result)
-            previous=self._plan(path);data=self._validate_plan(path,result,previous)
+            previous=self._plan(path);data=self._validate_plan(path,result,previous,bibliography_budget=task.get('strategy')==STRATEGY)
             included=p['objective']['included'];coverage=result.get('objective_coverage',[])
             if task.get('final_batch') and {c.get('index') for c in coverage}!=set(range(len(included))):raise ValueError('Collega tutti gli obiettivi ai capitoli o a lacune esplicite.')
             ids={c['id'] for c in data['chapters']}

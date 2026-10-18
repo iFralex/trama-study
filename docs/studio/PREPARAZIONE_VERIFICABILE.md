@@ -109,7 +109,7 @@ Un errore di bibliografia indica `chapters[indice].sources`, l'identità del cap
 
 ### Pianificazione per contributi persistenti
 
-I nuovi percorsi usano `compact-map-1`. La lettura sistematica delle fonti rimane completa; cambia il modo di ricomporne i risultati. Le richieste al pianificatore includono concetti, affermazioni, notazioni, ipotesi, esempi, problemi e riferimenti. Intervalli originali, copie degli estratti e impronte restano nel database e non vengono ricopiati in ogni richiesta. `read_preparation_evidence` recupera evidenze per ID, capitolo o pagina; gli strumenti per leggere gli originali rimangono disponibili nel tutor, nella riconciliazione e nelle revisioni.
+I nuovi percorsi usano `compact-map-1`. La lettura sistematica delle fonti rimane completa; cambia il modo di ricomporne i risultati. Le richieste al pianificatore includono concetti, affermazioni, notazioni, ipotesi, esempi, problemi e riferimenti. Intervalli originali, copie degli estratti e impronte restano nel database e non vengono ricopiati in ogni richiesta. `read_preparation_evidence` recupera evidenze per ID, capitolo o pagina; gli strumenti per leggere gli originali rimangono disponibili nel tutor e nelle revisioni.
 
 L’indice iniziale viene preparato una volta. Ogni lotto successivo produce soltanto contributi ai capitoli: ID delle evidenze, aggiunte didattiche, competenze e dubbi. Il servizio richiede che ogni evidenza proposta sia assegnata e rifiuta ID estranei, contributi incompleti o risultati obsoleti. Le bibliografie vengono unite dalle fonti effettive delle evidenze; non sono riscritte dal modello. Dopo tutti i contributi avvengono una riconciliazione complessiva e la revisione della mappa. Problemi bloccanti richiedono una nuova riconciliazione, riusando i contributi compatibili anziché rileggerli.
 
@@ -118,3 +118,8 @@ I contributi sono persistenti e idempotenti. L’impronta della costruzione comp
 La revisione della mappa e la produzione dei capitoli ricevono un contesto pertinente e gli strumenti di recupero, anziché tutte le copie dei testi originali contenute nelle evidenze. La scelta del modello conserva Sol per pianificazione, contributi e verifiche. La ricognizione preliminare del prossimo compito viene riutilizzata per l’avvio solo se il database non è cambiato: nessuna seconda scansione identica per scegliere il modello.
 
 L’interfaccia distingue evidenze organizzate, contributi salvati e contenuti revisionati. Questi contatori non misurano la comprensione dello studente.
+
+
+La riconciliazione usa una sessione dedicata senza strumenti: compone il progetto dai contributi; la revisione successiva verifica gli originali. La risposta nuova è limitata a 24000 caratteri. Bibliografie e copertura sono ricostruite dal servizio. Il contenuto didattico mantiene il limite di 130000 caratteri; per questa composizione il totale con riferimenti validati ha un limite separato di 260000.
+
+Se una precedente riconciliazione dello stesso percorso e della stessa impronta è interrotta, il recupero decodifica soltanto campi JSON completi. Quando chapters e gaps sono integri, vengono conservati esattamente; una nuova richiesta completa soltanto i metadati mancanti. Stringhe e oggetti troncati non vengono riparati né interpretati come fatti. La composizione passa gli stessi controlli di fonti, perimetro, prerequisiti e copertura e resta soggetta alla revisione della mappa. Le lacune e le esclusioni precedenti sono conservate; le chiamate originali rimangono nello storico.

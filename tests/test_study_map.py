@@ -4,7 +4,7 @@ from tests import test_study as fixtures
 from tests import test_study_preparation as prep
 from polimi_lectures.study import Study
 from polimi_lectures.study_course import pack
-from polimi_lectures.study_map import STRATEGY,compact_fact
+from polimi_lectures.study_map import STRATEGY,compact_fact,recover_map_fields
 
 @unittest.skipIf(fixtures.pymupdf is None,'Requires native runtime')
 class MapTest(unittest.TestCase):
@@ -52,6 +52,28 @@ class MapTest(unittest.TestCase):
         chapter=self.task();self.assertEqual(chapter['kind'],'chapter');self.assertNotIn('evidence',chapter);self.assertIn('evidence_context',chapter)
         facts=self.store.preparation_facts(self.path,chapter='pram',limit=1);self.assertEqual(len(facts['evidence']),1);self.assertIsNotNone(facts['next_offset'])
         self.assertNotIn('read_ranges',pack(facts))
+
+    def test_truncated_map_recovers_only_complete_fields_and_cannot_rewrite_them(self):
+        task=self.outline();self.commit(task,self.part(task));final=self.task()
+        plan=self.blueprint();raw=json.dumps({'chapters':plan['chapters'],'gaps':['Keep this uncertainty']})[:-1]+',"outside_scope":[{"document":"cut'
+        recovered=recover_map_fields(raw)
+        self.assertEqual(recovered['chapters'],plan['chapters']);self.assertEqual(recovered['gaps'],['Keep this uncertainty']);self.assertNotIn('outside_scope',recovered)
+        self.assertIsNone(recover_map_fields('{"chapters":[{"id":"cut'))
+        final['recovery']={'call':'saved-call','fields':recovered}
+        result={k:v for k,v in plan.items() if k not in ('chapters','gaps')}
+        merged=self.store._map_merge(self.path,final,result)
+        self.assertEqual(merged['chapters'][0]['objective'],plan['chapters'][0]['objective']);self.assertIn('Keep this uncertainty',merged['gaps'])
+        with self.assertRaisesRegex(ValueError,'campi mancanti'):self.store._map_merge(self.path,final,plan)
+
+    def test_reconciliation_is_bounded_and_preserves_previous_caveats(self):
+        task=self.outline();self.commit(task,self.part(task));final=self.task()
+        self.assertEqual(final['reconciliation_version'],2)
+        result=self.blueprint();result['chapters'][0]['sources']=[]
+        final['previous_notes']={'gaps':['Original unresolved uncertainty'],'outside_scope':[]}
+        merged=self.store._map_merge(self.path,final,result)
+        self.assertIn('Original unresolved uncertainty',merged['gaps'])
+        huge=copy.deepcopy(result);huge['coverage_notes']='x'*24001
+        with self.assertRaisesRegex(ValueError,'24000'):self.store._map_merge(self.path,final,huge)
 
     def test_missing_or_foreign_evidence_and_wrong_chapter_cannot_be_committed(self):
         task=self.outline();valid=self.part(task)
