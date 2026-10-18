@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from collections import Counter
 
 
+CHAPTER_LIMITS={'max_blocks':48,'max_characters':180000}
+
 def stamp(): return datetime.now(timezone.utc).isoformat()
 def ident(): return uuid.uuid4().hex
 def pack(value): return json.dumps(value, ensure_ascii=False)
@@ -401,8 +403,12 @@ class CourseStudy:
     def _validate_chapter_content(self,path,chapter,content):
         p=self._path(path);plan=self._plan(path);blueprint=next((c for c in plan['data']['chapters'] if c['id']==chapter),None)
         if not blueprint:raise ValueError('Capitolo non presente nel piano.')
+        if not isinstance(content,dict):raise ValueError('Il capitolo deve essere un oggetto JSON con blocks.')
         blocks=content.get('blocks',[])
-        if not blocks or len(blocks)>24 or len(pack(content))>180000:raise ValueError('Contenuto del capitolo non valido.')
+        if not isinstance(blocks,list) or not blocks:raise ValueError('blocks deve essere un elenco non vuoto di spiegazioni e attivita.')
+        if len(blocks)>CHAPTER_LIMITS['max_blocks']:raise ValueError(f"Capitolo con {len(blocks)} blocchi: massimo {CHAPTER_LIMITS['max_blocks']}. Raggruppa spiegazioni adiacenti senza eliminare contenuti o esercizi.")
+        size=len(pack(content))
+        if size>CHAPTER_LIMITS['max_characters']:raise ValueError(f"Capitolo di {size} caratteri: massimo {CHAPTER_LIMITS['max_characters']}. Sintetizza senza troncare JSON o fonti.")
         if len({b.get('id') for b in blocks})!=len(blocks):raise ValueError('Identità dei blocchi duplicate.')
         dependencies={'@preferences:'+p['course']:self._preference_fingerprint(p['course']),'@blueprint':hashlib.sha256(pack(blueprint).encode()).hexdigest()}
         for b in blocks:

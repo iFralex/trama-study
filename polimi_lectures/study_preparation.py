@@ -9,7 +9,7 @@ import subprocess
 import unicodedata
 from collections import Counter
 from .study_map import MapStudy,STRATEGY
-from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles
+from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles, CHAPTER_LIMITS
 
 VERSION='selective-2.3'
 STATUSES={'relevant','prerequisite','outside','uncertain'}
@@ -337,6 +337,7 @@ class PreparationStudy(MapStudy):
         return selected
 
     def _prep_task(self,path,data):
+        if data.get('kind') in ('chapter','repair_chapter'):data=dict(data,chapter_limits=dict(CHAPTER_LIMITS))
         p=self._path(path);refs=set()
         def gather(value):
             if isinstance(value,dict):

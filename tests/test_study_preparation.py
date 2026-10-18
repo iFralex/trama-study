@@ -59,6 +59,20 @@ class PreparationTest(unittest.TestCase):
         doc.save(file);doc.close();self.store.import_course(self.course)
         return [r[0] for r in self.store.db.execute("SELECT id FROM passages WHERE course=? AND title='many-references.pdf' ORDER BY page",(self.course,))]
 
+    def test_chapter_limits_are_visible_and_26_blocks_do_not_require_regeneration(self):
+        task=self.to_chapter();self.assertEqual(task['chapter_limits'],{'max_blocks':48,'max_characters':180000})
+        template=self.content()['blocks'][0]
+        content={'blocks':[dict(template,id='block-'+str(i)) for i in range(26)]}
+        self.commit(task,content)
+        self.assertEqual(len(self.task()['draft']['blocks']),26)
+        for count in (48,49):
+            candidate={'blocks':[dict(template,id='block-'+str(i)) for i in range(count)]}
+            if count==48:self.store._validate_chapter_content(self.path,task['chapter']['id'],candidate)
+            else:
+                with self.assertRaisesRegex(ValueError,'49.*48'):self.store._validate_chapter_content(self.path,task['chapter']['id'],candidate)
+        candidate={'blocks':[dict(template,text='x'*180001)]}
+        with self.assertRaisesRegex(ValueError,'caratteri.*180000'):self.store._validate_chapter_content(self.path,task['chapter']['id'],candidate)
+
     def test_map_with_43_real_references_commits_once_and_preserves_every_reference(self):
         refs=self.many_references();self.assertEqual(len(refs),43);self.start()
         for _ in range(60):
