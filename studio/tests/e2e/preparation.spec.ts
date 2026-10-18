@@ -73,3 +73,19 @@ test('automatic model assignment can be enabled from model settings',async({page
   await page.goto('/');await page.getByRole('button',{name:'◇ Modello e accesso'}).click();
   const toggle=page.getByRole('checkbox',{name:'Assegnazione automatica Luna/Sol'});await expect(toggle).not.toBeChecked();await toggle.click();await expect(toggle).toBeChecked();expect(saved).toEqual({enabled:true});
 });
+
+test('compact map progress updates without moving focus or losing the chat draft',async({page,request})=>{
+  const paths=await (await request.get('/api/courses/'+course+'/paths')).json();const target=paths.find((p:any)=>p.objective.summary==='Primo parziale PRAM');
+  let integrated=172,parts=0;
+  await page.route('**/api/paths/'+target.id,async route=>{
+    const response=await route.fetch(),data=await response.json();data.status='running';
+    data.preparation.phase='map_contribution';data.preparation.mapping={integrated,total:886,parts_done:parts};
+    await route.fulfill({response,json:data});
+  });
+  await enter(page);await expect(page.getByRole('heading',{name:'Contributi alla mappa',exact:true})).toBeVisible();
+  await expect(page.locator('.preparation-progress')).toContainText('172 / 886 evidenze organizzate');
+  const chat=page.getByLabel('Messaggio al tutor del corso',{exact:true});await chat.fill('La mia bozza rimane qui');await chat.focus();
+  integrated=230;parts=1;
+  await expect(page.locator('.preparation-progress')).toContainText('230 / 886 evidenze organizzate',{timeout:8000});
+  await expect(chat).toBeFocused();await expect(chat).toHaveValue('La mia bozza rimane qui');
+});

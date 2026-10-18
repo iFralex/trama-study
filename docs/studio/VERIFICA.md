@@ -155,3 +155,13 @@ Risolto il blocco della mappa con 43 riferimenti in un capitolo: la bibliografia
 Ogni richiesta di preparazione e l'eventuale riparazione dispongono di un proprio limite di dieci minuti, entro venti minuti complessivi per il compito. Alla scadenza il servizio cancella la richiesta, conserva i checkpoint e mostra un errore esplicito; un timeout non attiva ulteriori tentativi automatici. Una risposta completata non lascia timer che possano interrompere la richiesta successiva.
 
 Verifiche: 80 test Python dello studio, 35 test TypeScript/Pi e typecheck superati. La regressione include salvataggio e idempotenza di una mappa con 43 fonti distinte, controlli di protezione e validità dopo il trentesimo riferimento, bibliografia malformata, limite complessivo del piano, limite delle attività e cancellazione anche quando lo stream non termina. I test non richiedono chiamate reali al provider.
+
+### Ottimizzazione della mappa (18 ottobre 2026)
+
+Misura offline su una copia dell’archivio reale: 886 evidenze valide, di cui 172 già incorporate nei lotti completati del percorso attivo. Restavano 57 riscritture complete della mappa con il vecchio algoritmo. Con lo stesso budget delle fonti, il nuovo algoritmo richiede 12 lotti di contributi per le 714 evidenze restanti, una riconciliazione e una revisione finale: 14 richieste principali contro 58, prima di eventuali riparazioni. Questo è un conteggio strutturale, non una misura del tempo o dell’utilizzo dell’abbonamento.
+
+I dati delle evidenze passano da 2.960.378 a 921.949 caratteri mediante una proiezione che conserva tutti i campi didattici e i riferimenti. Le copie degli estratti e i metadati di verifica restano archiviati. Il rapporto privato `.state/studio/evaluations/compact-map-20261018.json` conserva conteggi e limiti; segnaposto usati per misurare l’accodamento esistono soltanto nella copia eliminabile, mai nel corso reale.
+
+Le regressioni specifiche verificano assegnazione di tutte le evidenze, ID estranei rifiutati, ricostruzione delle bibliografie, idempotenza, ripresa dopo riavvio, obiettivo cambiato, riuso dei lotti compatibili del medesimo percorso, accesso filtrato alle evidenze e invalidazione della cache del prossimo compito. La pipeline Pi simulata completa anche scrittura e revisioni. La verifica browser controlla i nuovi contatori, il loro aggiornamento automatico e la conservazione di focus e bozze.
+
+Controlli dell’ottimizzazione: 87 test Python dello studio, 35 test TypeScript/Pi e typecheck/build completati. Sei scenari Playwright coprono preparazione, persistenza e il nuovo avanzamento della mappa. Il confronto offline non attribuisce una percentuale di risparmio sull’abbonamento né garantisce un tempo di completamento.

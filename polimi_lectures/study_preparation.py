@@ -8,6 +8,7 @@ import re
 import subprocess
 import unicodedata
 from collections import Counter
+from .study_map import MapStudy,STRATEGY
 from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles
 
 VERSION='selective-2.3'
@@ -40,7 +41,7 @@ def exam_contains(text,original):
     needle=exam_tokens(text);haystack=exam_tokens(original)
     return bool(needle) and any(haystack[i:i+len(needle)]==needle for i in range(len(haystack)-len(needle)+1))
 
-class PreparationStudy:
+class PreparationStudy(MapStudy):
     def setup_preparation(self):
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS prep_runs(path TEXT PRIMARY KEY,version TEXT,phase TEXT,current TEXT,last_checkpoint TEXT,error TEXT,created TEXT,updated TEXT);
@@ -63,14 +64,15 @@ class PreparationStudy:
         ''')
         if 'cursor' not in {r[1] for r in self.db.execute('PRAGMA table_info(prep_spans)')}:self.db.execute('ALTER TABLE prep_spans ADD COLUMN cursor INTEGER DEFAULT 0')
         if 'excerpt' not in {r[1] for r in self.db.execute('PRAGMA table_info(prep_reads)')}:self.db.execute('ALTER TABLE prep_reads ADD COLUMN excerpt TEXT')
+        self._map_setup()
         self.db.commit()
 
     def _v2(self,path):return self._path(path)['objective'].get('engine')==2
 
-    def course_create(self,course,request,date='',minutes=None,reserved=None,engine=2):
+    def course_create(self,course,request,date='',minutes=None,reserved=None,engine=2,map_strategy=STRATEGY):
         result=super().course_create(course,request,date,minutes,reserved)
         if engine==2:
-            o=result['objective'];o['engine']=2
+            o=result['objective'];o['engine']=2;o['map_strategy']=map_strategy
             with self.db:
                 self.db.execute('UPDATE course_paths SET objective=? WHERE id=?',(pack(o),result['id']))
                 self.db.execute('INSERT INTO prep_runs VALUES(?,?,?,?,?,?,?,?)',(result['id'],VERSION,'scope',None,None,None,stamp(),stamp()))
@@ -356,10 +358,24 @@ class PreparationStudy:
 
     def course_peek_task(self,path,input_tokens=32000,model_key=''):
         self._peek_preparation=True
-        try:return self.course_task(path,input_tokens,model_key)
+        try:
+            task=self.course_task(path,input_tokens,model_key)
+            self._peek_cache=(path,int(input_tokens),self.db.total_changes,self.db.execute('PRAGMA data_version').fetchone()[0],copy.deepcopy(task))
+            return task
         finally:self._peek_preparation=False
 
     def course_task(self,path,input_tokens=32000,model_key=''):
+        cache=getattr(self,'_peek_cache',None)
+        if cache and not getattr(self,'_peek_preparation',False):
+            self._peek_cache=None
+            same=cache[:4]==(path,int(input_tokens),self.db.total_changes,self.db.execute('PRAGMA data_version').fetchone()[0])
+            task=cache[4]
+            # A brand-new build needs its manifest persisted by the normal task builder.
+            built=not task.get('build') or self.db.execute('SELECT 1 FROM prep_map_builds WHERE path=? AND build=?',(path,task['build'])).fetchone()
+            if same and task.get('engine')==2 and task.get('kind')!='done' and built:
+                data={k:v for k,v in task.items() if k not in ('task_id','engine','objective')}
+                data['model_key']=model_key
+                return self._prep_task(path,data)
         p=self._path(path)
         if p['objective'].get('archived'):raise ValueError('Preparazione archiviata: disponibile solo per consultazione.')
         if not self._v2(path) or not p['objective'].get('confirmed'):
@@ -406,6 +422,7 @@ class PreparationStudy:
         claims=self.preparation_evidence(path,limit=100000)
         plan=self._plan(path)
         if not plan or not plan['data'].get('final'):
+            if p['objective'].get('map_strategy')==STRATEGY:return self._map_task(path,claims,common)
             cursor=self.db.execute('SELECT position FROM prep_map_cursor WHERE path=?',(path,)).fetchone();offset=cursor[0] if cursor else 0
             batch=[];used=0
             for claim in claims[offset:]:
@@ -415,7 +432,7 @@ class PreparationStudy:
             selection=[dict(r) for r in self.db.execute('SELECT p.document,s.status,count(*) intervals FROM prep_spans s JOIN passages p ON p.id=s.source WHERE s.path=? GROUP BY p.document,s.status',(path,))]
             return self._prep_task(path,dict(common,kind='map',student_clarifications=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND chapter='map' AND state='needs_review'",(path,))],evidence=batch,evidence_offset=offset,final_batch=offset+len(batch)>=len(claims),exam_profile=self.course_exam_profile(path),selection=selection,previous=plan))
         reviewed=self.db.execute('SELECT data FROM prep_map_reviews WHERE path=? AND version=?',(path,plan['version'])).fetchone()
-        if not reviewed:return self._prep_task(path,dict(common,kind='map_review',plan=plan,evidence=claims,exam_profile=self.course_exam_profile(path)))
+        if not reviewed:return self._prep_task(path,dict(common,kind='map_review',plan=plan,evidence_context=self._map_context(path,claims),exam_profile=self._map_profile(path)))
         position=self.db.execute('SELECT * FROM course_path_sessions WHERE path=? ORDER BY rowid DESC LIMIT 1',(path,)).fetchone();chapters=plan['data']['chapters'];index=next((i for i,c in enumerate(chapters) if position and c['id']==position['chapter']),0)
         for chapter in chapters[index:index+2]:
             old=self._chapter(path,chapter['id']);draft=self.db.execute('SELECT * FROM prep_drafts WHERE path=? AND chapter=? ORDER BY revision DESC LIMIT 1',(path,chapter['id'])).fetchone()
@@ -428,7 +445,7 @@ class PreparationStudy:
                 draft=None
             if old and not self._chapter_stale(old) and (not draft or draft['published']):continue
             if not draft or draft['published']:
-                return self._prep_task(path,dict(common,kind='chapter',chapter=chapter,plan=plan,evidence=claims,profile=self.course_exam_profile(path),sources=[self.source(ref,allow_solutions=False) for ref in chapter['sources'][:8]],preferences=self.course_journal(p['course'],kind='preference',limit=12)))
+                return self._prep_task(path,dict(common,kind='chapter',chapter=chapter,plan=plan,evidence_context=self._map_context(path,claims,chapter),profile=self.course_exam_profile(path),sources=[self.source(ref,allow_solutions=False) for ref in chapter['sources'][:8]],preferences=self.course_journal(p['course'],kind='preference',limit=12)))
             content=unpack(draft['data']);reviews={key:unpack(draft[key]) for key in ('solve','discipline','didactic')}
             refs=list(dict.fromkeys(ref for b in content['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))))
             originals=[];used=len(pack(content))//3
@@ -508,6 +525,7 @@ class PreparationStudy:
             if unpack(record['result'])!=result:raise ValueError('Checkpoint già completato: risultato differente rifiutato.')
             return self.course_path_view(path)
         if record['state'] not in ('running','waiting','correcting'):raise ValueError('Compito non attivo.')
+        raw_result=copy.deepcopy(result)
         kind=task['kind'];p=self._path(path)
         # Each referenced document must still match the revision actually read.
         for r in self.db.execute('SELECT r.fingerprint,d.fingerprint current FROM prep_reads r JOIN passages s ON s.id=r.source JOIN documents d ON d.id=s.document WHERE r.task=?',(task['task_id'],)):
@@ -587,7 +605,10 @@ class PreparationStudy:
                 for link in task.get('links',[]):
                     ref=link['source']['id'];self.db.execute("UPDATE prep_spans SET done=1,cursor=? WHERE path=? AND source=? AND selected=1 AND status!='outside'",(len(link['source']['text']),path,ref))
                 if kind=='exam_reading':self.db.execute('INSERT OR IGNORE INTO course_exposure VALUES(?,?,?)',(p['course'],task['document'],stamp()))
+        elif kind in ('map_outline','map_contribution'):
+            self._map_commit_part(path,task,result)
         elif kind=='map':
+            if task.get('strategy')==STRATEGY:result=self._map_merge(path,task,result)
             previous=self._plan(path);data=self._validate_plan(path,result,previous)
             included=p['objective']['included'];coverage=result.get('objective_coverage',[])
             if task.get('final_batch') and {c.get('index') for c in coverage}!=set(range(len(included))):raise ValueError('Collega tutti gli obiettivi ai capitoli o a lacune esplicite.')
@@ -597,7 +618,7 @@ class PreparationStudy:
             mapped={d for c in data['chapters'] for d in c.get('coverage',[])}
             if task.get('final_batch') and not selected<=mapped:raise ValueError('La mappa omette fonti selezionate: '+', '.join(selected-mapped))
             with self.db:self.db.execute('INSERT INTO course_plans VALUES(?,?,?,?,?)',(path,previous['version']+1 if previous else 1,pack(dict(data,final=bool(task.get('final_batch')))),'Mappa delle evidenze selezionate',stamp()))
-            with self.db:self.db.execute('INSERT OR REPLACE INTO prep_map_cursor VALUES(?,?)',(path,task.get('evidence_offset',0)+len(task.get('evidence',[]))))
+            with self.db:self.db.execute('INSERT OR REPLACE INTO prep_map_cursor VALUES(?,?)',(path,task['evidence_count'] if task.get('strategy')==STRATEGY else task.get('evidence_offset',0)+len(task.get('evidence',[]))))
         elif kind=='map_review':
             self._review_result(path,task,result,None)
             with self.db:self.db.execute('INSERT OR REPLACE INTO prep_map_reviews VALUES(?,?,?)',(path,task['plan']['version'],pack(result)))
@@ -636,7 +657,7 @@ class PreparationStudy:
             self._publish_reviewed(path,task)
         else:raise ValueError('Fase di preparazione sconosciuta.')
         with self.db:
-            self.db.execute("UPDATE prep_tasks SET state='done',result=?,finished=?,error=NULL WHERE id=?",(pack(result),stamp(),task['task_id']))
+            self.db.execute("UPDATE prep_tasks SET state='done',result=?,finished=?,error=NULL WHERE id=?",(pack(raw_result),stamp(),task['task_id']))
             self.db.execute('UPDATE prep_runs SET last_checkpoint=?,current=NULL,error=NULL,updated=? WHERE path=?',(stamp(),stamp(),path))
         return self.course_path_view(path)
 
@@ -752,7 +773,15 @@ class PreparationStudy:
         counts=dict(self.db.execute('SELECT state,count(*) FROM prep_tasks WHERE path=? GROUP BY state',(path,)).fetchall())
         details=dict(current) if current else None
         if details:details['routing']=unpack(details.get('metrics'),{}).get('routing')
-        return dict(run,current_task=details,task_counts=counts,issues=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND state!='superseded' ORDER BY rowid",(path,))])
+        mapping=None
+        if self._path(path)['objective'].get('map_strategy')==STRATEGY:
+            row=self.db.execute('SELECT build,manifest FROM prep_map_builds WHERE path=? ORDER BY rowid DESC LIMIT 1',(path,)).fetchone()
+            if row:
+                manifest=unpack(row['manifest']);covered=set(manifest['covered'])
+                for part in self.db.execute('SELECT data FROM prep_map_parts WHERE path=? AND build=?',(path,row['build'])):
+                    covered.update(cid for a in unpack(part[0])['additions'] for cid in a['evidence'])
+                mapping={'integrated':len(covered),'total':len(manifest['all_ids']),'parts_done':self.db.execute('SELECT count(*) FROM prep_map_parts WHERE path=? AND build=?',(path,row['build'])).fetchone()[0]}
+        return dict(run,mapping=mapping,current_task=details,task_counts=counts,issues=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND state!='superseded' ORDER BY rowid",(path,))])
 
     def preparation_model_call(self,path,task,call,model,role,data):
         if not self.db.execute('SELECT 1 FROM prep_tasks WHERE id=? AND path=?',(task,path)).fetchone():raise ValueError('Compito non disponibile.')

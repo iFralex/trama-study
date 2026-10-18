@@ -44,7 +44,8 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     if(hybrid&&body.model==='reader'&&task.kind==='selection'){output.decisions[0].status='outside';output.decisions[0].reason='Candidate exclusion to verify';}
     if(hybrid&&body.model==='reader'&&task.kind==='evidence_reading'){output.needs_expert=true;output.expert_questions=['Check a notation ambiguity.'];}
     if(task.kind==='exam_reading'&&!rejectedQuestionOnce){rejectedQuestionOnce=true;output.questions[0].text='INVENTED_QUESTION_NOT_IN_PAPER';}
-    if(task.kind==='map')output={chapters:[{id:'pram',title:'PRAM dalle basi',objective:'Capire il modello',prerequisites:[],sources:[source],priority:'alta',priority_reason:'Programma e tema autentico',assessment:'Domanda aperta',coverage:[...new Set(task.selection.map((d:any)=>d.document))]}],gaps:[],outside_scope:[],coverage_notes:'Fonti selezionate',objective_coverage:[{index:0,chapters:['pram']}]};
+    if(task.kind==='map'||task.kind==='map_outline')output={chapters:[{id:'pram',title:'PRAM dalle basi',objective:'Capire il modello',prerequisites:[],sources:[source],priority:'alta',priority_reason:'Programma e tema autentico',assessment:'Domanda aperta',coverage:[...new Set(task.selection.map((d:any)=>d.document))]}],gaps:[],outside_scope:[],coverage_notes:'Fonti selezionate',objective_coverage:[{index:0,chapters:['pram']}]};
+    if(task.kind==='map_contribution')output={additions:[{chapter:'pram',evidence:task.evidence_ids,notes:'Insegna PRAM e gli accessi alla memoria dalle basi.',skills:['PRAM']}]};
     if(task.kind==='map_review')output={summary:'Mappa completa',checked_objectives:[0],issues:[]};
     if(task.kind==='chapter')output={blocks:[{id:'intro',kind:'text',text:'Un algoritmo è una sequenza di istruzioni. PRAM è un modello astratto.',sources:[source]},{id:'worked',kind:'text',text:'Esempio svolto: con due valori serve un livello di riduzione.',sources:[source]},{id:'exercise',kind:'activity',depends_on:['intro'],spec:{kind:'numeric',title:'Variante autonoma',prompt:'Otto valori: quanti livelli?',origin:'generated',assumptions:'Albero binario bilanciato',solution:'Tre livelli',answer:3,rubric:'Numero di livelli',sources:[source],verification:{model:'reduction_depth',input:{n:8},expected:3}}}]};
     if(task.kind==='review_solve'){
@@ -77,6 +78,8 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     }
     const ready=await bridge.call('course_path_view',{path:p.id});assert.equal(ready.status,'ready',ready.error);
     assert.equal(ready.profile.total,1);assert.equal(ready.chapters[0].review.status,'reviewed');assert.equal(ready.current.content.blocks.length,3);
+    assert.ok(phases.includes('map_outline'));assert.ok(phases.includes('map_contribution'));assert.equal(phases.filter(p=>p==='map').length,1);
+    const contribution=payloads.find(p=>JSON.stringify(p.messages).includes('evidence_ids'));assert.ok(!contribution.tools?.length);assert.doesNotMatch(JSON.stringify(contribution),/read_ranges|access_fingerprints/);
     assert.ok(phases.indexOf('exam_reading')<phases.indexOf('selection'));assert.ok(phases.indexOf('review_solve')<phases.indexOf('review_discipline'));assert.ok(phases.indexOf('review_discipline')<phases.indexOf('review_didactic'));
     assert.doesNotMatch(JSON.stringify(payloads),/HOLDOUT_SECRET|HOLDOUT_SOLUTION_SECRET/);
     assert.equal(phases.filter(p=>p==='exam_reading').length,2);
@@ -85,7 +88,7 @@ c=sqlite3.connect(sys.argv[1]);print(json.dumps(c.execute('SELECT error,output F
     assert.equal(diagnostics.length,1);assert.match(diagnostics[0][0],/questions\[0\]/);assert.match(diagnostics[0][1],/INVENTED_QUESTION_NOT_IN_PAPER/);
     assert.ok(Object.keys(ready.preparation.task_counts).includes('done'));assert.equal(tutor.preparationOwner,undefined);
     if(hybrid){
-      for(const kind of ['scope','map','map_review','chapter','review_solve','review_discipline','review_didactic'])assert.ok(trace.filter(t=>t.kind===kind).every(t=>t.model==='test'));
+      for(const kind of ['scope','map_outline','map_contribution','map','map_review','chapter','review_solve','review_discipline','review_didactic'])assert.ok(trace.filter(t=>t.kind===kind).every(t=>t.model==='test'));
       for(const kind of ['selection']){assert.ok(trace.some(t=>t.kind===kind&&t.model==='reader'));assert.ok(trace.some(t=>t.kind===kind&&t.model==='test'));}
       for(const kind of ['exam_reading','evidence_reading'])assert.ok(trace.filter(t=>t.kind===kind).every(t=>t.model==='test'));
       const selectionPayload=payloads.find(p=>p.model==='reader');assert.ok(!selectionPayload.tools?.length);assert.doesNotMatch(JSON.stringify(selectionPayload),/create_activity|LONG_EXAM_TEXT/);

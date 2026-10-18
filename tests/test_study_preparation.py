@@ -11,9 +11,9 @@ class PreparationTest(unittest.TestCase):
     setUp=fixtures.StudyTest.setUp
     tearDown=fixtures.StudyTest.tearDown
 
-    def start(self):
+    def start(self,map_strategy='legacy'):
         held=next(d['id'] for d in self.store.course_inventory(self.course)['documents'] if d['title']=='PC-1st-part-25-07-21.pdf')
-        p=self.store.course_create(self.course,'Primo parziale: PRAM',reserved=[held]);self.path=p['id'];self.sid=p['sid']
+        p=self.store.course_create(self.course,'Primo parziale: PRAM',reserved=[held],map_strategy=map_strategy);self.path=p['id'];self.sid=p['sid']
         task=self.task();self.commit(task,{'summary':'Primo parziale PRAM','included':['PRAM'],'excluded':['Secondo parziale'],'clarification':None})
         self.store.course_confirm(self.path)
         return self.path
