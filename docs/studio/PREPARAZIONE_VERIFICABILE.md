@@ -100,3 +100,9 @@ L’avanzamento mostra il modello attivo e il motivo dell’assegnazione/passagg
 Le richieste di preparazione restano sequenziali e la chat ha priorità fra i compiti. Un modello lettore non disponibile può essere sostituito dall’esperto. Un limite condiviso ChatGPT arresta invece il lavoro: non viene aggirato provando l’altro modello. Le configurazioni di budget vengono calcolate per il modello effettivamente usato. Le identità dei compiti includono modello e versione della politica; una ricognizione preliminare non crea compiti pendenti inutilizzati.
 
 Configurazione: `preparation_routing` nelle impostazioni SQLite, politica `hybrid-2`. Endpoint `POST /api/model-routing` con `{enabled:boolean}`. `GET /api/models` riporta modello singolo e politica salvata; il salvataggio dell’impostazione non invia materiali al provider. Le chiamate effettive iniziano con la ripresa della preparazione o una richiesta di chat.
+
+### Bibliografie e diagnostica della mappa
+
+La bibliografia dei capitoli può superare 30 passaggi: contiene le fonti delle molte letture ricomposte nel capitolo. Il servizio valida ogni riferimento, conservando riserve, esclusione delle soluzioni e appartenenza al corso. La dimensione complessiva della mappa rimane limitata a 130.000 caratteri; singole attività e liste di evidenze mantengono i loro limiti più stretti. Non si eliminano fonti automaticamente per far passare una validazione.
+
+Un errore di bibliografia indica `chapters[indice].sources`, l'identità del capitolo e il riferimento non valido. Richiesta iniziale e unica eventuale riparazione hanno una finestra separata di dieci minuti, entro venti minuti complessivi: una riparazione non viene interrotta dal timer della risposta precedente. I timeout espliciti arrestano il compito, lasciando i checkpoint disponibili.

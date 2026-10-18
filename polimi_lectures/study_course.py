@@ -69,12 +69,24 @@ class CourseStudy:
         row=self.db.execute('SELECT * FROM course_path_sessions WHERE session=?',(sid,)).fetchone()
         return dict(row) if row else None
 
-    def _refs(self,course,refs,required=True):
-        if not isinstance(refs,list) or (required and not refs) or len(refs)>30: raise ValueError('Servono fonti citabili del corso.')
-        for ref in refs:
-            source=self.source(ref,allow_reserved=False,allow_solutions=False)
-            if source['course']!=course: raise ValueError('Fonte di un altro corso.')
-        return list(dict.fromkeys(refs))
+    def _refs(self,course,refs,required=True,limit=30):
+        if not isinstance(refs,list) or (required and not refs):
+            raise ValueError('Servono fonti citabili del corso: atteso un elenco non vuoto di passage ID.')
+        if any(not isinstance(ref,str) or not ref.strip() for ref in refs):
+            raise ValueError('Ogni riferimento deve essere un passage ID testuale non vuoto.')
+        if limit is not None and len(refs)>limit:
+            raise ValueError(f'Troppi riferimenti: ricevuti {len(refs)}, massimo {limit} per questa attivita.')
+        unique=list(dict.fromkeys(refs))
+        checked=set()
+        for index,ref in enumerate(refs):
+            if ref in checked:continue
+            checked.add(ref)
+            try:
+                source=self.source(ref,allow_reserved=False,allow_solutions=False)
+                if source['course']!=course:raise ValueError('Fonte di un altro corso.')
+            except ValueError as error:
+                raise ValueError(f'sources[{index}] ({ref}): {error}') from error
+        return unique
 
     def course_inventory(self,course):
         self.course_path(course)
@@ -281,9 +293,13 @@ class CourseStudy:
         if any(not i or len(i)>100 for i in ids) or len(set(ids))!=len(ids):raise ValueError('Identità dei capitoli non valide.')
         if len(pack(data))>130000:raise ValueError('Piano troppo grande: sintetizza le schede, conserva i dettagli nelle fonti.')
         seen=set()
-        for c in chapters:
+        for chapter_index,c in enumerate(chapters):
             if not c.get('title') or not c.get('objective') or not c.get('priority_reason') or not c.get('assessment'):raise ValueError('Ogni capitolo richiede titolo, obiettivo, priorità motivata e progetto degli esercizi.')
-            self._refs(p['course'],c.get('sources'))
+            # A chapter bibliography aggregates many readings. The plan's byte limit
+            # bounds its size; the activity-level 30-reference limit does not apply.
+            try:self._refs(p['course'],c.get('sources'),limit=None)
+            except ValueError as error:
+                raise ValueError(f'chapters[{chapter_index}].sources ({c["id"]}): {error}') from error
             if not isinstance(c.get('prerequisites',[]),list) or any(i not in seen for i in c.get('prerequisites',[])):raise ValueError('Prerequisiti mancanti, ciclici o successivi al capitolo.')
             seen.add(c['id'])
         if previous:

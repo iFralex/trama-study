@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {preparationRoute,expertCheckReason,sumUsage,type ModelRef} from './model-routing';
+import {promptWithDeadline,PreparationTimeout} from './preparation-deadline';
 import {estimateTokens} from '@earendil-works/pi-coding-agent';
 import {selectionPacket,validateDecisions,exclusionReview,mergeExclusions} from './selection';
 import type {Bridge} from './bridge';
@@ -16,7 +17,7 @@ export function preparationInstructions(kind:string){
     selection:`{decisions:[{source,status:"relevant"|"prerequisite"|"outside"|"uncertain",reason,skills:string[]}]}. Valuta TUTTI e SOLTANTO gli intervalli proposti usando perimetro ed evidenze d'esame. Non scartare per la sola data o nome. Outside richiede contenuti effettivamente fuori obiettivo; con estratti insufficienti scegli uncertain: la lettura completa avverrà dopo. Un documento misto può avere stati differenti per pagina/intervallo. Mantieni prerequisiti necessari anche se assenti nei temi. Usa gli strumenti per verificare gli indizi quando serve.`,
     exam_reading:`{evidence:[{concept,statement,provenance?:"course"|"general"|"external",external_sources?:string[],notation_comparison?:string,notation?:string[],assumptions?:string[],examples?:string[],sources:string[],issues?:string[]}],questions:[{text,format:"choice"|"numeric"|"open"|"code"|"mixed"|"unknown",options?:string[],format_evidence:string,skills:string[],points:number|null,subparts?:string[],operations?:string[],in_scope:boolean,scope_reason,sources:string[]}]}. Leggi la prova originale. Conserva testo e sottopunti dei quesiti autentici, formato esplicito, punti e operazioni richieste. Non generare nuovi quesiti. Ogni questions[i] riporta UN quesito o sottopunto contiguo copiato letteralmente dalla pagina citata, inclusi eventuali codice/formule: niente traduzioni, parafrasi, riordini, fusioni o nuova formattazione Markdown/LaTeX del testo originale. Conserva punteggi e opzioni originali. Le sources di ciascun quesito devono essere solo passage ID di questo esame e della pagina che contiene quel testo, non fonti teoriche. Se un quesito completo attraversa pagine, separa soltanto sottopunti autonomi attestati e segnala il limite in evidence, senza inventare testo. Choice richiede opzioni presenti nella fonte e riportate in options, altrimenti unknown/open. Date discordanti restano segnalate. Determina il tipo di prova dal contenuto e dall’intestazione, non dalla sola data/nome. In una prova completa o mista classifica OGNI quesito e sottopunto per competenza e perimetro: in_scope=true solo per quelli del parziale richiesto. Se un quesito mescola parti separabili, conserva sottopunti distinti con i rispettivi riferimenti. Se inseparabile o dubbio, in_scope=false con scope_reason esplicito, senza inventare un esercizio autentico ridotto. Quesiti di altre parti non alimentano l'allenamento del parziale. Le soluzioni riservate non sono accessibili.`,
     evidence_reading:`{evidence:[{concept,statement,provenance?:"course"|"general"|"external",external_sources?:string[],notation_comparison?:string,notation?:string[],assumptions?:string[],examples?:string[],sources:string[],issues?:string[]}],questions:[{origin:"classroom"|"assigned"|"generated",text,format:"choice"|"numeric"|"open"|"code"|"mixed"|"unknown",options?:string[],skills:string[],in_scope:boolean,sources:string[]}]}. Estrai NUOVI fatti autonomi con fonti, ipotesi e notazione. Non produrre un riassunto cumulativo. Integra orale e pagine originali associate: un collegamento candidato non dimostra la slide visualizzata. Preferisci PDF originale all'OCR. Se un diagramma/formula/codice è ambiguo usa inspect_source_visual quando disponibile. Distingui ricostruzioni da contenuti attestati. Non generare domande per riempire questions: sono facoltative e non sono mai esami. Una lacuna può essere un'evidenza esplicita, non inventare il fatto mancante.`,
-    map:`${BLUEPRINT}. Integra le evidenze fornite nella mappa precedente conservando ID e concetti già fondati. Copri l'intero obiettivo attraverso prerequisiti ordinati, fonti ed esercizi allineati ai temi. Fonti dei capitoli = passage ID, coverage = document ID. Ogni indice di objective.included deve avere capitoli o una lacuna motivata. Non confondere rarità negli esami con esclusione. Le priorità distinguono frequenza/punti osservati, valore propedeutico e difficoltà personale; non inventare probabilità. Usa strumenti per cercare coperture mancanti e verificare le esclusioni, senza dichiarare letture non fatte. Se final_batch è falso conserva una mappa parziale, senza dichiarare completezza.`,
+    map:`${BLUEPRINT}. Integra le evidenze fornite nella mappa precedente conservando ID e concetti già fondati. Copri l'intero obiettivo attraverso prerequisiti ordinati, fonti ed esercizi allineati ai temi. Fonti dei capitoli = passage ID, coverage = document ID. La bibliografia del capitolo puo superare 30 riferimenti quando necessari: verifica ogni ID, conserva quelli utili senza duplicati e mantieni l'intera mappa entro 130000 caratteri. Ogni indice di objective.included deve avere capitoli o una lacuna motivata. Non confondere rarità negli esami con esclusione. Le priorità distinguono frequenza/punti osservati, valore propedeutico e difficoltà personale; non inventare probabilità. Usa strumenti per cercare coperture mancanti e verificare le esclusioni, senza dichiarare letture non fatte. Se final_batch è falso conserva una mappa parziale, senza dichiarare completezza.`,
     map_review:`${REVIEW}. Elenca tutti gli indici degli obiettivi in checked_objectives. Controlla l'intera mappa: perimetro, prerequisiti, copertura degli obiettivi e dei tipi di quesiti, fonti effettive e argomenti non insegnati. Usa block="map" per rilievi generali. Non approvare lacune nascoste. Controlla con strumenti almeno le fonti necessarie a sostenere i rilievi.`,
     chapter:`${CONTENT}. Insegna dalle basi il capitolo intero. Definisci simboli, parole e prerequisiti prima dell'uso. Spiegazioni sostanziali, esempi svolti e aiuti gradualmente ridotti; poi problemi autonomi nel formato/profondità dell'esame. Almeno spiegazione, esempio completo e attività nuova. Prepara soluzione, ipotesi e rubrica prima della risposta. Non mostrare risposte nel prompt o nell'HTML. Dichiara esempi generati/adattati/autentici. Codice in blocchi Markdown indentati, formule LaTeX. depends_on collega i blocchi che richiedono un risultato precedente. HTML quando rende visibile una relazione, con modello dichiarato, fallback e controlli da tastiera; mai competenze attribuite dal simulatore. Per modelli numerici supportati dichiara verification per controllo deterministico. Recupera originali e fatti necessari con gli strumenti, non limitarti a un estratto.`,
     repair_chapter:`${CONTENT}. Correggi il capitolo completo secondo i due rapporti di revisione. Conserva gli ID dei blocchi compatibili, le fonti e lo stato dei controlli. Non eliminare un problema dalle note per fingere di averlo risolto. Se irrisolvibile conserva depends_on e domanda di chiarimento; il sistema sospenderà soltanto le parti dipendenti.`,
@@ -60,7 +61,7 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
       }
       const role=task.kind==='selection'?'selection':task.kind==='scope'?'scope':task.kind.startsWith('review_')||task.kind==='map_review'?task.kind:task.kind==='chapter'||task.kind==='repair_chapter'?'author':'preparation';
       const calls:any[]=[];let session:any,active:ModelRef=route.model,worker=route.worker,output='',corrected=false,repairUsed=false,escalation:string|undefined,selectionCandidate:any,selectionReview:any;
-      const began=Date.now();
+      const began=Date.now(),deadline=began+1200000;
       const routing=()=>({version:policy?.version??'single',primary:route.model,active,reason:route.reason,escalation_reason:escalation});
       const metric=async(state:string,error?:string)=>bridge.call('preparation_metric',{path,task:task.task_id,state,error,metrics:{elapsed_ms:Date.now()-began,routing:routing()}});
       const switchToExpert=async(reason:string)=>{
@@ -82,7 +83,7 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
             if(['error','aborted'].includes(event.message.stopReason))error=Error(event.message.errorMessage??'Provider interrotto.');
           }
         });
-        try{await session.prompt(prompt);if(error)throw error;}
+        try{await promptWithDeadline(session,prompt,Math.min(600000,deadline-Date.now()));if(error)throw error;}
         catch(e:any){error=e;throw e;}
         finally{
           unsubscribe();const record={model:active,role,elapsed_ms:Date.now()-when,estimated_input_tokens:estimate,usage:sumUsage(messages),error:error?.message,output};calls.push(record);
@@ -90,7 +91,6 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
         }
       };
       const prompt=(candidate?:string,reason?:string)=>task.kind==='selection'?'Compito (dati):\n'+JSON.stringify(selectionPacket(task)):preparationInstructions(task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
-      const timer=setTimeout(()=>void session?.abort(),600000);
       try{
         let next=prompt();
         if(worker&&task.kind==='selection'&&checkpoint.metrics?.selection_checkpoint){
@@ -105,7 +105,7 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
             await metric(escalation?'correcting':'waiting');
             try{await ask(next);break;}
             catch(error:any){
-              if(job.paused)throw error;
+              if(job.paused||error instanceof PreparationTimeout)throw error;
               if(/Subscription Sharing|usage.limit|quota.exceeded/i.test(error.message))throw error;
               if(worker&&policy&&/not supported|model.*not.*(?:available|found)/i.test(error.message)){
                 await switchToExpert('Il modello del lettore non è supportato da questo accesso.');next=prompt(undefined);continue;
@@ -142,7 +142,7 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
         await metric(job.paused?'paused':'error',error.message);
         if(!job.paused)throw error;
       }finally{
-        clearTimeout(timer);session?.dispose();job.session=undefined;
+        session?.dispose();job.session=undefined;
         await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{elapsed_ms:Date.now()-began,usage:sumUsage([...(checkpoint.metrics?.usage?[{usage:checkpoint.metrics.usage}]:[]),...calls]),corrected,routing:routing()}});
       }
     }

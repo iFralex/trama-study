@@ -147,3 +147,11 @@ Attivazione successiva: ricevuta conferma esplicita «Sì, autorizzo l’invio a
 ### Selezione circoscritta e confronto dei costi (17 ottobre 2026)
 
 Politica `hybrid-2`: Luna solo per selezione, Sol per letture tecniche e revisioni. Confronto reale e limiti in [CONFRONTO_MODELLI.md](CONFRONTO_MODELLI.md). Verificati 78 test Python dello studio, 32 test TypeScript/Pi e cinque test Playwright della preparazione; typecheck e build completati. I test aggiunti controllano ID mancanti/duplicati/estranei, fusione limitata alle esclusioni, conservazione delle fonti incerte e recupero della verifica esperta senza richiamare Luna. Le prove HTTP/Pi sintetiche verificano anche riserve, errori del provider e arresto sui limiti condivisi. Nessuna chiamata reale al provider nei test automatici di regressione; i confronti reali sono separati e i loro rapporti rimangono nella cartella dati.
+
+### Bibliografie dei capitoli e tempo delle correzioni (18 ottobre 2026)
+
+Risolto il blocco della mappa con 43 riferimenti in un capitolo: la bibliografia di un capitolo aggrega molte letture e non eredita più il limite di 30 riferimenti delle singole attività. Restano obbligatori tutti i controlli su esistenza, corso, temi protetti e soluzioni; il piano conserva il limite complessivo di 130.000 caratteri. Nessun riferimento viene troncato automaticamente. Gli errori identificano capitolo, campo e ID responsabile; gli altri usi del validatore conservano il limite di 30.
+
+Ogni richiesta di preparazione e l'eventuale riparazione dispongono di un proprio limite di dieci minuti, entro venti minuti complessivi per il compito. Alla scadenza il servizio cancella la richiesta, conserva i checkpoint e mostra un errore esplicito; un timeout non attiva ulteriori tentativi automatici. Una risposta completata non lascia timer che possano interrompere la richiesta successiva.
+
+Verifiche: 80 test Python dello studio, 35 test TypeScript/Pi e typecheck superati. La regressione include salvataggio e idempotenza di una mappa con 43 fonti distinte, controlli di protezione e validità dopo il trentesimo riferimento, bibliografia malformata, limite complessivo del piano, limite delle attività e cancellazione anche quando lo stream non termina. I test non richiedono chiamate reali al provider.

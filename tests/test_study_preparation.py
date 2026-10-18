@@ -51,6 +51,45 @@ class PreparationTest(unittest.TestCase):
     def review(self,task,blocking=False):
         return {'summary':'Revisione completa','checked_blocks':[b['id'] for b in task['draft']['blocks']],'checked_sources':list({r for b in task['draft']['blocks'] for r in b.get('sources',b.get('spec',{}).get('sources',[]))}),'issues':[{'block':'intro','severity':'blocking','message':'Definizione da chiarire','sources':self.content()['blocks'][0]['sources']}] if blocking else []}
 
+    def many_references(self):
+        file=self.root/'corsi'/self.course/'materiali'/'many-references.pdf'
+        doc=fixtures.pymupdf.open()
+        for index in range(43):
+            page=doc.new_page();page.insert_text((30,40),f'Synthetic PRAM reference {index}: processors and shared memory.')
+        doc.save(file);doc.close();self.store.import_course(self.course)
+        return [r[0] for r in self.store.db.execute("SELECT id FROM passages WHERE course=? AND title='many-references.pdf' ORDER BY page",(self.course,))]
+
+    def test_map_with_43_real_references_commits_once_and_preserves_every_reference(self):
+        refs=self.many_references();self.assertEqual(len(refs),43);self.start()
+        for _ in range(60):
+            task=self.task()
+            if task['kind']=='map':break
+            if task['kind']=='selection':
+                self.commit(task,{'decisions':[{'source':s['id'],'status':'relevant','reason':'Synthetic PRAM material','skills':['PRAM']} for s in task['previews']]})
+            else:self.read(task)
+        else:self.fail('Map task not reached')
+        data=self.blueprint();data['chapters'][0]['sources']=refs
+        self.commit(task,data)
+        saved=self.store._plan(self.path)
+        self.assertEqual(saved['data']['chapters'][0]['sources'],refs)
+        self.store.preparation_commit(self.path,task,data)
+        self.assertEqual(self.store._plan(self.path)['version'],saved['version'])
+        self.assertEqual(self.task()['kind'],'map_review')
+        with self.assertRaisesRegex(ValueError,'43.*30'):self.store._refs(self.course,refs)
+
+    def test_long_map_bibliography_still_checks_protection_and_validity_after_reference_30(self):
+        refs=self.many_references();self.start();data=self.blueprint()
+        held=next(d for d in self.store.course_inventory(self.course)['documents'] if d['title']=='PC-1st-part-25-07-21.pdf')
+        solution=next(d for d in self.store.course_inventory(self.course)['documents'] if d['title']=='PC-1st-part-25-06-19.sol.pdf')
+        for ref in [held['id']+':0',solution['id']+':0','missing-reference']:
+            bad=copy.deepcopy(data);bad['chapters'][0]['sources']=refs+[ref]
+            with self.assertRaisesRegex(ValueError,r'chapters\[0\].sources.*sources\[43\]'):self.store._validate_plan(self.path,bad)
+        for refs_bad in [[],None,'not-a-list',[None]]:
+            bad=copy.deepcopy(data);bad['chapters'][0]['sources']=refs_bad
+            with self.assertRaisesRegex(ValueError,r'chapters\[0\].sources'):self.store._validate_plan(self.path,bad)
+        data['chapters'][0]['sources']=refs;data['coverage_notes']='x'*130001
+        with self.assertRaisesRegex(ValueError,'Piano troppo grande'):self.store._validate_plan(self.path,data)
+
     def test_scope_followup_reopens_only_unconfirmed_path_and_preserves_reservations(self):
         p=self.store.course_create(self.course,'Primo parziale',reserved=[]);self.path=p['id'];self.sid=p['sid']
         task=self.task();self.commit(task,{'summary':'Confine incerto','included':['PRAM'],'excluded':[],'clarification':'OpenMP incluso?'})
