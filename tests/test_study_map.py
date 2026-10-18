@@ -75,6 +75,64 @@ class MapTest(unittest.TestCase):
         huge=copy.deepcopy(result);huge['coverage_notes']='x'*24001
         with self.assertRaisesRegex(ValueError,'24000'):self.store._map_merge(self.path,final,huge)
 
+    def test_successful_mapping_prevents_reapplying_old_truncated_draft(self):
+        task=self.outline();self.commit(task,self.part(task));failed=self.task()
+        with self.store.db:
+            self.store.db.execute("UPDATE prep_tasks SET state='error' WHERE id=?",(failed['task_id'],))
+            self.store.db.execute('INSERT INTO prep_model_calls VALUES(?,?,?,?,?,?,?)',('truncated-call',self.path,failed['task_id'],'{}','preparation',pack({'output':json.dumps(self.blueprint())[:-1]+',"unfinished":'}),'now'))
+        claims=self.store.preparation_evidence(self.path,limit=100000)
+        self.assertIsNotNone(self.store._map_recovery(self.path,failed['build'],claims))
+        different={k:v for k,v in failed.items() if k not in ('task_id','engine','objective','source_revisions')};different['reconciliation_version']=99
+        succeeded=self.store._prep_task(self.path,different);self.commit(succeeded,self.blueprint())
+        self.assertIsNone(self.store._map_recovery(self.path,failed['build'],claims))
+
+    def reviewed_map_with_problem(self):
+        task=self.outline();self.commit(task,self.part(task));final=self.task()
+        plan=self.blueprint();plan['gaps']=['Historical partial map','Actual unresolved formula']
+        doc=self.store.source(plan['chapters'][0]['sources'][0])['document']
+        plan['outside_scope']=[{'document':doc,'reason':'Old incorrect exclusion'}]
+        self.commit(final,plan);review=self.task();ref=plan['chapters'][0]['sources'][0]
+        self.store.preparation_begin(self.path,review);self.store.preparation_read(review['task_id'],self.store.source(ref),'read_source')
+        self.commit(review,{'summary':'Correct stale exclusion and attach source','checked_objectives':[0],'checked_sources':[ref],'issues':[{'block':'map','severity':'blocking','message':'Stale exclusion','sources':[ref]}]})
+        repair=self.task();self.assertEqual(repair.get('repair_version'),1);return repair,ref,doc
+
+    def test_review_repairs_revoke_stale_metadata_and_preserve_history_and_sources(self):
+        task,ref,doc=self.reviewed_map_with_problem();version=self.store._plan(self.path)['version']
+        old_claims=self.store.preparation_evidence(self.path,limit=100000)
+        actual_doc=self.store.source(ref)['document']
+        # Revoke the actual document with evidence from that document.
+        if actual_doc!=doc:
+            ref=next(s['id'] for s in task['repair_sources'] if s['document']==doc)
+        result={'chapter_updates':[{'id':'pram','assessment':'Motivate without importing excluded task graphs.','sources':[ref]}],
+          'resolve_gaps':[{'index':0,'reason':'Full map now reconciled','sources':[]}],
+          'revoke_exclusions':[{'document':doc,'reason':'Reviewed original establishes prerequisite','sources':[ref]}],
+          'scope_updates':[{'source':ref,'status':'prerequisite','reason':'Original read in expert review'}]}
+        self.commit(task,result);saved=self.store._plan(self.path)
+        self.assertGreater(saved['version'],version);self.assertEqual(saved['data']['gaps'],['Actual unresolved formula'])
+        self.assertEqual(saved['data']['outside_scope'],[]);self.assertEqual(saved['data']['gap_history'][0]['state'],'superseded')
+        self.assertEqual(saved['data']['scope_history'][0]['state'],'revoked')
+        self.assertIn(ref,saved['data']['chapters'][0]['sources']);self.assertIn(doc,saved['data']['chapters'][0]['coverage'])
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM prep_scope_changes').fetchone()[0],1)
+        self.assertEqual(self.store.preparation_evidence(self.path,limit=100000),old_claims)
+        self.assertEqual(self.task()['kind'],'map_review')
+        self.store.preparation_commit(self.path,task,result)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM prep_scope_changes').fetchone()[0],1)
+
+    def test_invalid_or_stale_repair_cannot_change_scope_or_other_chapters(self):
+        task,ref,doc=self.reviewed_map_with_problem();before=self.store._plan(self.path)
+        for result in [{'chapter_updates':[{'id':'alien','sources':[ref]}]},
+                       {'chapter_updates':[{'id':'pram','sources':['unknown-ref']}]},
+                       {'revoke_exclusions':[{'document':doc,'reason':'Unsupported','sources':[]}]},
+                       {'resolve_gaps':[{'index':999,'reason':'Invalid'}]},
+                       {'scope_updates':[{'source':ref,'status':'outside','reason':'Not a bounded repair'}]},
+                       {'chapters':[]}]:
+            with self.assertRaises(ValueError):self.commit(task,result)
+            self.assertEqual(self.store._plan(self.path),before)
+            self.assertEqual(self.store.db.execute('SELECT count(*) FROM prep_scope_changes').fetchone()[0],0)
+        # A previously repaired version must never be overwritten by a stale delta.
+        self.commit(task,{'chapter_updates':[{'id':'pram','objective':'Updated objective'}]})
+        with self.assertRaisesRegex(ValueError,'obsoleta'):self.store._map_apply_repair(self.path,task,{})
+
     def test_missing_or_foreign_evidence_and_wrong_chapter_cannot_be_committed(self):
         task=self.outline();valid=self.part(task)
         for alter in ('missing','foreign','chapter'):

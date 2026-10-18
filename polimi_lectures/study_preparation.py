@@ -433,6 +433,8 @@ class PreparationStudy(MapStudy):
             return self._prep_task(path,dict(common,kind='map',student_clarifications=[dict(r,data=unpack(r['data'])) for r in self.db.execute("SELECT * FROM prep_issues WHERE path=? AND chapter='map' AND state='needs_review'",(path,))],evidence=batch,evidence_offset=offset,final_batch=offset+len(batch)>=len(claims),exam_profile=self.course_exam_profile(path),selection=selection,previous=plan))
         reviewed=self.db.execute('SELECT data FROM prep_map_reviews WHERE path=? AND version=?',(path,plan['version'])).fetchone()
         if not reviewed:return self._prep_task(path,dict(common,kind='map_review',plan=plan,evidence_context=self._map_context(path,claims),exam_profile=self._map_profile(path)))
+        if p['objective'].get('map_strategy')==STRATEGY and any(i.get('severity')=='blocking' for i in unpack(reviewed['data']).get('issues',[])):
+            return self._map_task(path,claims,common)
         position=self.db.execute('SELECT * FROM course_path_sessions WHERE path=? ORDER BY rowid DESC LIMIT 1',(path,)).fetchone();chapters=plan['data']['chapters'];index=next((i for i,c in enumerate(chapters) if position and c['id']==position['chapter']),0)
         for chapter in chapters[index:index+2]:
             old=self._chapter(path,chapter['id']);draft=self.db.execute('SELECT * FROM prep_drafts WHERE path=? AND chapter=? ORDER BY revision DESC LIMIT 1',(path,chapter['id'])).fetchone()
@@ -617,7 +619,9 @@ class PreparationStudy(MapStudy):
             selected={r[0] for r in self.db.execute("SELECT DISTINCT p.document FROM prep_spans s JOIN passages p ON p.id=s.source WHERE s.path=? AND s.status!='outside'",(path,))}
             mapped={d for c in data['chapters'] for d in c.get('coverage',[])}
             if task.get('final_batch') and not selected<=mapped:raise ValueError('La mappa omette fonti selezionate: '+', '.join(selected-mapped))
-            with self.db:self.db.execute('INSERT INTO course_plans VALUES(?,?,?,?,?)',(path,previous['version']+1 if previous else 1,pack(dict(data,final=bool(task.get('final_batch')))),'Mappa delle evidenze selezionate',stamp()))
+            with self.db:
+                if task.get('repair_version'):self._map_commit_scope_repairs(path,task,raw_result)
+                self.db.execute('INSERT INTO course_plans VALUES(?,?,?,?,?)',(path,previous['version']+1 if previous else 1,pack(dict(data,final=bool(task.get('final_batch')))),'Correzione mirata dopo revisione' if task.get('repair_version') else 'Mappa delle evidenze selezionate',stamp()))
             with self.db:self.db.execute('INSERT OR REPLACE INTO prep_map_cursor VALUES(?,?)',(path,task['evidence_count'] if task.get('strategy')==STRATEGY else task.get('evidence_offset',0)+len(task.get('evidence',[]))))
         elif kind=='map_review':
             self._review_result(path,task,result,None)
@@ -628,7 +632,7 @@ class PreparationStudy(MapStudy):
                     iid=digest(['map',task['plan']['version'],issue])[:24]
                     self.db.execute('INSERT OR REPLACE INTO prep_issues VALUES(?,?,?,?,?,?,?)',(path,iid,'map','map',issue['severity'],pack(issue),'open'))
             if any(i['severity']=='blocking' for i in result['issues']):
-                attempts=self.db.execute('SELECT count(*) FROM prep_map_reviews WHERE path=?',(path,)).fetchone()[0]
+                attempts=self.db.execute("SELECT count(*) FROM prep_map_reviews r JOIN course_plans p ON p.path=r.path AND p.version=r.version WHERE r.path=? AND COALESCE(json_extract(p.data,'$.map_repair_version'),0)=?",(path,task['plan']['data'].get('map_repair_version',0))).fetchone()[0]
                 if attempts>=3:raise ValueError('La mappa richiede un chiarimento: '+result['issues'][0]['message'])
                 with self.db:self.db.execute('DELETE FROM prep_map_cursor WHERE path=?',(path,))
                 with self.db:

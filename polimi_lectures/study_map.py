@@ -37,6 +37,7 @@ class MapStudy:
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS prep_map_builds(path TEXT,build TEXT,manifest TEXT,outline TEXT,created TEXT,PRIMARY KEY(path,build));
         CREATE TABLE IF NOT EXISTS prep_map_parts(path TEXT,build TEXT,part TEXT,task TEXT,data TEXT,PRIMARY KEY(path,build,part));
+        CREATE TABLE IF NOT EXISTS prep_scope_changes(path TEXT,task TEXT,source TEXT,previous TEXT,current TEXT,PRIMARY KEY(task,source));
         """)
 
     def preparation_optimize_map(self,path):
@@ -97,11 +98,19 @@ class MapStudy:
                 batch.append(fact);used+=cost
             return self._prep_task(path,dict(base,kind='map_contribution',part=digest([c['id'] for c in batch]),outline=compact_outline,evidence=batch,evidence_ids=[c['id'] for c in batch],covered=len(covered),total=len(claims)))
         previous=self._plan(path)
+        review=self.db.execute('SELECT data FROM prep_map_reviews WHERE path=? AND version=?',(path,previous['version'])).fetchone() if previous else None
+        feedback=unpack(review['data']) if review else (previous or {}).get('data',{}).get('review_feedback')
+        if feedback and any(i.get('severity')=='blocking' for i in feedback.get('issues',[])):
+            refs=list(dict.fromkeys(feedback.get('checked_sources',[])+[ref for issue in feedback.get('issues',[]) for ref in issue.get('sources',[])]))
+            checked={r[0] for r in self.db.execute("SELECT r.source FROM prep_reads r JOIN prep_tasks t ON t.id=r.task WHERE t.path=? AND t.kind='map_review' AND json_extract(t.input,'$.plan.version')=?",(path,previous['version'] if review else previous['version']-1))}
+            refs=[ref for ref in refs if ref in checked]
+            originals=[self.source(ref,allow_solutions=False) for ref in refs]
+            return self._prep_task(path,dict(base,kind='map',repair_version=1,repair_plan=previous,review_feedback=feedback,repair_sources=originals,final_batch=True,evidence_count=len(claims),covered=len(covered)))
         previous_notes={k:previous['data'][k] for k in ('gaps','outside_scope','coverage_notes','objective_coverage') if previous and k in previous['data']}
         return self._prep_task(path,dict(base,kind='map',reconciliation_version=2,recovery=self._map_recovery(path,build,claims),final_batch=True,outline=outline(previous) or chapters,previous_notes=previous_notes,contributions=[{'chapter':a['chapter'],'notes':a['notes'],'skills':a.get('skills',[])} for part in parts for a in part['additions']],review_feedback=(self._plan(path) or {}).get('data',{}).get('review_feedback'),selection=self._map_inventory(path),exam_profile=self._map_profile(path),evidence_count=len(claims),covered=len(covered)))
 
     def _map_recovery(self,path,build,claims):
-        for row in self.db.execute("SELECT c.id,c.data,c.task,t.input FROM prep_model_calls c JOIN prep_tasks t ON t.id=c.task WHERE t.path=? AND t.kind='map' AND t.state='error' ORDER BY c.rowid DESC LIMIT 3",(path,)):
+        for row in self.db.execute("SELECT c.id,c.data,c.task,t.input FROM prep_model_calls c JOIN prep_tasks t ON t.id=c.task WHERE t.path=? AND t.kind='map' AND t.state='error' AND NOT EXISTS (SELECT 1 FROM prep_tasks newer WHERE newer.path=t.path AND newer.kind='map' AND newer.state='done' AND newer.rowid>t.rowid) ORDER BY c.rowid DESC LIMIT 3",(path,)):
             old=unpack(row['input'])
             if old.get('build')!=build or old.get('strategy')!=STRATEGY:continue
             fields=recover_map_fields(unpack(row['data']).get('output',''))
@@ -163,6 +172,7 @@ class MapStudy:
                 for cid in a['evidence']:
                     for ref in byid[cid]['sources']:
                         chapter['sources'].add(ref);chapter['coverage'].add(self.source(ref,allow_solutions=False)['document'])
+        if task.get('repair_version'):return self._map_apply_repair(path,task,result)
         # Keep earlier caveats without spending output tokens copying them. The
         # reconciler may explicitly refine an entry, but omission never erases it.
         if len(pack(result))>24000:raise ValueError('Riconciliazione troppo lunga: massimo 24000 caratteri prima delle bibliografie; sintetizza il progetto, non scrivere i capitoli.')
@@ -187,6 +197,84 @@ class MapStudy:
             c['coverage']=sorted(set(c.get('coverage',[]))|bibliography['coverage'])
         data['map_build']=build
         return data
+
+    def _map_apply_repair(self,path,task,result):
+        """Validated deltas preserve chapter identities and make retractions explicit."""
+        current=self._plan(path)
+        if not current or current['version']!=task['repair_plan']['version']:raise ValueError('Correzione obsoleta: il piano e cambiato.')
+        if len(pack(result))>24000:raise ValueError('Correzioni troppo lunghe: massimo 24000 caratteri.')
+        allowed={'chapter_updates','resolve_gaps','revoke_exclusions','scope_updates','gaps','outside_scope','coverage_notes','objective_coverage'}
+        if set(result)-allowed:raise ValueError('Usa soltanto i campi della correzione mirata, non riscrivere il piano completo.')
+        data=copy.deepcopy(current['data']);byid={c['id']:c for c in data['chapters']}
+        refs={s['id'] for s in task['repair_sources']}
+        def checked(values,required=False):
+            if not isinstance(values,list) or any(not isinstance(v,str) for v in values):raise ValueError('Fonti della correzione non valide.')
+            if required and not values:raise ValueError('La rettifica richiede le fonti originali verificate.')
+            if not set(values)<=refs:raise ValueError('La correzione cita fonti non lette nella revisione: conserva i riferimenti forniti.')
+            if values:self._refs(self._path(path)['course'],values,limit=None)
+            return list(dict.fromkeys(values))
+        for key in ('chapter_updates','resolve_gaps','revoke_exclusions','scope_updates','gaps','outside_scope'):
+            if not isinstance(result.get(key,[]),list):raise ValueError('Campo '+key+' non valido.')
+        seen=set()
+        for change in result.get('chapter_updates',[]):
+            cid=change.get('id')
+            if cid not in byid or cid in seen:raise ValueError('Capitolo della correzione estraneo o duplicato.')
+            seen.add(cid)
+            if set(change)-{'id','objective','assessment','priority_reason','exam_skills','prerequisites','sources'}:raise ValueError('Campo del capitolo non modificabile dalla correzione.')
+            chapter=byid[cid]
+            for key in ('objective','assessment','priority_reason'):
+                if key in change:
+                    if not isinstance(change[key],str) or not change[key].strip():raise ValueError('Progetto del capitolo vuoto.')
+                    chapter[key]=change[key]
+            for key in ('exam_skills','prerequisites'):
+                if key in change:
+                    if not isinstance(change[key],list) or any(not isinstance(v,str) for v in change[key]):raise ValueError('Elenco del capitolo non valido.')
+                    chapter[key]=change[key]
+            additions=checked(change.get('sources',[]))
+            chapter['sources']=sorted(set(chapter.get('sources',[]))|set(additions))
+            chapter['coverage']=sorted(set(chapter.get('coverage',[]))|{self.source(ref,allow_solutions=False)['document'] for ref in additions})
+        gaps=current['data'].get('gaps',[]);resolved=set();history=data.setdefault('gap_history',[])
+        for decision in result.get('resolve_gaps',[]):
+            index=decision.get('index')
+            if type(index)!=int or not 0<=index<len(gaps) or index in resolved or not decision.get('reason'):raise ValueError('Lacuna da archiviare non valida o senza motivazione.')
+            sources=checked(decision.get('sources',[]));resolved.add(index)
+            history.append({'text':gaps[index],'reason':decision['reason'],'sources':sources,'state':'superseded','plan_version':current['version']})
+        additions=result.get('gaps',[])
+        if any(not isinstance(g,str) or not g.strip() for g in additions):raise ValueError('Nuove lacune non valide.')
+        data['gaps']=list(dict.fromkeys([g for i,g in enumerate(gaps) if i not in resolved]+additions))
+        exclusions={e['document']:e for e in data.get('outside_scope',[])};revoked=set()
+        for decision in result.get('revoke_exclusions',[]):
+            doc=decision.get('document')
+            if doc not in exclusions or doc in revoked or not decision.get('reason'):raise ValueError('Esclusione da revocare non valida o senza motivazione.')
+            sources=checked(decision.get('sources',[]),required=True)
+            if not any(self.source(ref,allow_solutions=False)['document']==doc for ref in sources):raise ValueError('La revoca richiede una pagina verificata del documento.')
+            revoked.add(doc);data.setdefault('scope_history',[]).append(dict(exclusions.pop(doc),state='revoked',reason_for_change=decision['reason'],sources=sources,plan_version=current['version']))
+        for exclusion in result.get('outside_scope',[]):
+            if not isinstance(exclusion,dict) or not exclusion.get('reason') or exclusion.get('document') in revoked:raise ValueError('Esclusione nuova non valida o gia revocata.')
+            doc=exclusion.get('document')
+            if not self.db.execute('SELECT 1 FROM passages WHERE course=? AND document=?',(self._path(path)['course'],doc)).fetchone():raise ValueError('Documento escluso estraneo al corso.')
+            exclusions[doc]=exclusion
+        data['outside_scope']=list(exclusions.values())
+        for key in ('coverage_notes','objective_coverage'):
+            if key in result:data[key]=result[key]
+        scope_seen=set()
+        for change in result.get('scope_updates',[]):
+            ref=change.get('source');checked([ref],required=True)
+            if ref in scope_seen or change.get('status') not in ('relevant','prerequisite') or not change.get('reason'):raise ValueError('Rettifica di selezione non valida.')
+            if not self.db.execute('SELECT 1 FROM prep_spans WHERE path=? AND source=?',(path,ref)).fetchone():raise ValueError('Intervallo di selezione sconosciuto.')
+            scope_seen.add(ref)
+        # No source, goal, reservation or exposure is changed here. Scope updates
+        # are committed transactionally only after all ordinary plan checks pass.
+        data.pop('review_feedback',None);data['map_repair_version']=1
+        data['repair_of_version']=current['version']
+        return data
+
+    def _map_commit_scope_repairs(self,path,task,result):
+        for change in result.get('scope_updates',[]):
+            ref=change['source'];row=self.db.execute('SELECT * FROM prep_spans WHERE path=? AND source=?',(path,ref)).fetchone()
+            old=dict(row);new=dict(old,status=change['status'],reason=change['reason'],selected=1,done=1,cursor=len(self.source(ref,allow_solutions=False)['text']))
+            self.db.execute('INSERT INTO prep_scope_changes VALUES(?,?,?,?,?)',(path,task['task_id'],ref,pack(old),pack(new)))
+            self.db.execute('UPDATE prep_spans SET status=?,reason=?,selected=1,done=1,cursor=? WHERE path=? AND source=?',(new['status'],new['reason'],new['cursor'],path,ref))
 
     def _map_context(self,path,claims,chapter=None):
         """Small source-grounded context for review/teaching; originals stay available via tools."""
