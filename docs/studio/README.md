@@ -2,7 +2,7 @@
 
 Apri `Studio.command`, oppure `Avvia.command` → operazione 5. Il browser si apre su `http://127.0.0.1:4326`. Lascia aperto il terminale; Ctrl+C ferma il servizio. Il primo avvio prepara e compila l'interfaccia. Node.js 22+ e il runtime visivo Python sono necessari. Dipendenze, cache, conversazioni e database seguono la cartella dati configurata.
 
-Scegli il corso e premi **Riprendi il percorso**. Una sessione precedente conserva attività, versione, bozze, interazioni e tentativi. **Nuova sessione** conserva lo storico. Obiettivo e tempo si modificano nella sessione. **Modello e accesso** elenca i modelli autenticati e offre i flussi API/OAuth dei provider Pi. Il programma non presuppone che un abbonamento dia accesso a ogni modello. Le fonti recuperate e le risposte necessarie vengono inviate al provider scelto; i file originali restano sul disco.
+Scegli il corso e premi **Continua a studiare**. Le sezioni principali sono **Studia**, **Percorso**, **Allenamento** e **Fonti**. Il capitolo occupa la pagina; indice e pannello Tutor/Fonti si aprono su richiesta. In **Fonti** puoi cercare e sfogliare i materiali per cartella. La cronologia delle conversazioni è nel pannello Tutor; le sessioni precedenti e il percorso dalle basi restano raggiungibili da **Impostazioni**. Una sessione precedente conserva attività, versione, bozze, interazioni e tentativi. **Nuova sessione** conserva lo storico. Obiettivo e tempo si modificano nella sessione. **Modello e accesso** elenca i modelli autenticati e offre i flussi API/OAuth dei provider Pi. Il programma non presuppone che un abbonamento dia accesso a ogni modello. Le fonti recuperate e le risposte necessarie vengono inviate al provider scelto; i file originali restano sul disco.
 
 ## Corso personale
 
@@ -99,3 +99,11 @@ Le descrizioni sono calcolate sul Mac da Speech Rule Engine 4.1.4, con ClearSpea
 Le verifiche browser controllano l'oggetto matematico unico nell'albero accessibile, il puntatore sulla `n`, la presenza di un unico elemento StaticText con l'intera descrizione, la coincidenza delle dimensioni con la formula e la resa visiva, le alternative e la preferenza dopo il ricaricamento. La voce nativa **Leggi gli elementi sotto il puntatore** deve essere provata sul Mac dell'utente: i test browser non garantiscono il comportamento di ogni versione di macOS/browser. Riferimenti: [KaTeX e MathML](https://katex.org/docs/options), [nome accessibile delle espressioni matematiche](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/math_role).
 
 Per la funzione di costo `T(...)` la lettura usa «T di …», anche con argomenti composti; le parentesi necessarie a distinguere i raggruppamenti restano nella descrizione. Questa convenzione riguarda soltanto la copia MathML destinata alla voce. `T(n)=an+b` si legge «T di n uguale a a per n più b».
+
+## Spazio di studio
+
+Il pulsante **Indice** apre i capitoli e permette di fissare l’indice sul desktop. **Tutor** e **Fonti** condividono un pannello ridimensionabile: trascina il bordo sinistro oppure usa le frecce da tastiera sul separatore. Su mobile il pannello si apre a tutto schermo; **Torna al capitolo** o Esc ripristina la lettura. Bozze e posizione restano conservate.
+
+Seleziona un passaggio per **Spiegami questo** o **Fammi un esempio**. Il testo selezionato rimane visibile nel tutor ed entra nella domanda. Risposte, riscontri e prossimo passo rimangono accanto all’esercizio. **Percorso** raccoglie obiettivo, preparazione, diario e revisioni; **Allenamento** raccoglie richiami e simulazioni.
+
+Gli aggiornamenti in background modificano lo stato della preparazione e i riscontri salvati. Una revisione del capitolo compare come **Aggiornamento disponibile · Applica** e non sostituisce il testo durante la lettura.

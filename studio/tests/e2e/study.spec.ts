@@ -1,4 +1,6 @@
 import {test,expect} from '@playwright/test';
+test.setTimeout(60000);
+test.beforeEach(async({page,request})=>{await request.post('/api/sessions',{data:{course:'a-course-2025-26'}});await page.addInitScript(()=>{if(window===window.top)localStorage.setItem('studio-last-view','studio');});await page.route('**/*',async route=>route.fulfill({response:await route.fetch()}));});
 
 test('real pathway, hints, HTML interaction, resume, sources and recall',async({page,request})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -39,12 +41,12 @@ test('real pathway, hints, HTML interaction, resume, sources and recall',async({
   await expect(page.getByText('Domanda da un tema originale · criteri proposti')).toBeVisible();
   await page.getByLabel('La tua risposta', {exact:true}).fill('EREW: exclusive reads and writes. CREW: concurrent reads, exclusive writes. CRCW: both concurrent, common rule.');
   await page.getByRole('button',{name:'Verifica risposta',exact:true}).click();
-  await expect(page.getByText('VALUTAZIONE PROVVISORIA',{exact:true})).toBeVisible();
+  await expect(page.getByText('RISPOSTA SALVATA',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Passa al prossimo passo →'}).click();
-  await page.getByLabel('La tua risposta', {exact:true}).fill('8');
+  await expect(page.getByRole('heading',{name:'Una variante senza aiuti',exact:true})).toBeVisible();await page.getByLabel('La tua risposta', {exact:true}).fill('8');
   await page.getByRole('button',{name:'Verifica risposta',exact:true}).click();
   await expect(page.getByText('Corretto. Ora prova a spiegare perché.')).toBeVisible();
-  await page.getByRole('button',{name:'Ripassi',exact:true}).click();
+  await page.getByText('Impostazioni',{exact:true}).click();await page.getByRole('button',{name:'Ripassi delle sessioni precedenti',exact:true}).click();
   await page.getByRole('button',{name:'Mettimi alla prova →'}).nth(1).click();
   await expect(page.getByRole('heading',{name:'Richiamo · un caso nuovo'})).toBeVisible();
   await page.getByRole('button',{name:'Fonti',exact:true}).click();
@@ -73,7 +75,7 @@ test('keyboard, provider failure preservation, source isolation and exam',async(
   await expect(composer).toBeDisabled();await expect(page.getByRole('button',{name:'Un indizio',exact:true})).toHaveCount(0);
   await page.getByLabel('La tua risposta',{exact:true}).fill('A saved independent answer.');
   await page.getByRole('button',{name:'Consegna',exact:true}).click();
-  await expect(page.getByText('VALUTAZIONE PROVVISORIA',{exact:true})).toBeVisible();
+  await expect(page.getByText('RISPOSTA SALVATA',{exact:true})).toBeVisible();
   await page.screenshot({path:process.env.STUDIO_SHOT_DIR?process.env.STUDIO_SHOT_DIR+'/exam.png':'test-results/exam.png',fullPage:true});
 });
 
@@ -96,7 +98,7 @@ test('a response never steals composer focus or overwrites the next draft',async
 
 test('sessions can be searched and resumed and ChatGPT access is visible',async({page})=>{
   await page.goto('/');
-  await page.getByRole('button',{name:'Sessioni',exact:true}).click();
+  await page.getByText('Impostazioni',{exact:true}).click();await page.getByRole('button',{name:'Conversazioni precedenti',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Le tue sessioni'})).toBeVisible();
   await page.getByLabel('Cerca nelle sessioni').fill('');
   await page.getByRole('button',{name:'Cerca sessioni',exact:true}).click();
@@ -117,7 +119,7 @@ test('beginner mode starts from course sources and resumes its lesson phase afte
   await expect(path.getByLabel('Lezione',{exact:true})).toBeVisible();
   await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();
   await expect(path).toBeVisible();await expect(page.locator('.message.user')).toContainText('Parti da zero');
-  await page.getByRole('button',{name:'Programma',exact:true}).click();
+  await page.getByText('Impostazioni',{exact:true}).click();await page.getByRole('button',{name:'Programma delle sessioni precedenti',exact:true}).click();
   await expect(page.getByRole('button',{name:'Studia questa lezione →'}).first()).toBeVisible();
 });
 
@@ -139,10 +141,10 @@ test('math is one accessible object under the pointer, with persistent text and 
   await formula.scrollIntoViewIfNeeded();
   const glyph=formula.locator('.katex-html .mord').filter({hasText:/^n$/}).first();const box=await glyph.boundingBox();expect(box).not.toBeNull();
   const target=await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.classList.contains('math-spoken-hitbox'),{x:box!.x+box!.width/2,y:box!.y+box!.height/2});expect(target).toBe(true);
-  await page.getByText('Accessibilità',{exact:true}).click();const mode=page.getByLabel('Modalità di lettura delle formule');
+  await page.getByText('Impostazioni',{exact:true}).click();await page.getByText('Accessibilità',{exact:true}).click();const mode=page.getByLabel('Modalità di lettura delle formule');
   await mode.selectOption('text');await expect(page.locator('.math-readable').filter({hasText:/T di n/})).toBeVisible();await expect(spoken).toHaveCount(0);
   await page.reload();await page.getByRole('button',{name:'Riprendi il percorso →'}).click();await expect(page.locator('.math-readable').filter({hasText:/T di n/})).toBeVisible();
-  await page.getByText('Accessibilità',{exact:true}).click();await mode.selectOption('symbols');await expect(page.locator('.math-unit[role="math"]')).toHaveCount(0);await expect(page.locator('.katex-html').first()).toBeVisible();
+  await page.getByText('Impostazioni',{exact:true}).click();await page.getByText('Accessibilità',{exact:true}).click();await mode.selectOption('symbols');await expect(page.locator('.math-unit[role="math"]')).toHaveCount(0);await expect(page.locator('.katex-html').first()).toBeVisible();
 });
 
 

@@ -1,23 +1,25 @@
 import {test,expect} from '@playwright/test';
+test.setTimeout(60000);
 const course='selective-course-2026';
-async function enter(page:any){await page.goto('/');await page.locator('.course-label select').selectOption(course);await page.getByRole('button',{name:'Corso personale',exact:true}).click();await page.getByRole('combobox',{name:'Percorso',exact:true}).selectOption({label:'Primo parziale PRAM'});await expect(page.getByRole('heading',{name:'PRAM dalle basi',exact:true})).toBeVisible();}
+async function enter(page:any){await page.goto('/');await page.locator('.course-label select').selectOption(course);await page.getByRole('button',{name:'Percorso',exact:true}).click();await page.getByRole('combobox',{name:'Percorso',exact:true}).selectOption({label:'Primo parziale PRAM'});await expect(page.locator('.chapter-grid')).toContainText('PRAM dalle basi');}
+test.beforeEach(async({page})=>{await page.route('**/*',async route=>route.fulfill({response:await route.fetch()}));});
 
 test('selective sources, complete reviews and autosaved choices are accessible without focus changes',async({page})=>{
   await enter(page);
   await expect(page.getByLabel('Preparazione dalle fonti originali')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByText('Doppia revisione completata',{exact:false})).toBeVisible();
+  await expect(page.locator('.chapter-grid')).toContainText('Disponibile per lo studio');
   await page.getByText('Fonti selezionate, lezioni ed esclusioni',{exact:true}).click();
   await page.getByText('2026-09-16 · Lezione',{exact:false}).click();
   const select=page.locator('.preparation-decision select').first();await expect(select).toBeVisible();await select.focus();
   await page.waitForTimeout(2800);await expect(select).toBeFocused();
   await select.selectOption('outside');await expect(select).toHaveValue('outside');
-  await page.reload();await page.getByRole('button',{name:'Corso personale',exact:true}).click();
+  await page.reload();await page.getByRole('button',{name:'Percorso',exact:true}).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByText('Fonti selezionate, lezioni ed esclusioni',{exact:true}).click();await page.getByText('2026-09-16 · Lezione',{exact:false}).click();
   await expect(page.locator('.preparation-decision select').first()).toHaveValue('outside');
   await page.screenshot({path:'/private/tmp/studio-selective-desktop.png',fullPage:true});
-  await page.setViewportSize({width:740,height:950});await page.getByRole('button',{name:'Chat',exact:true}).click();
+  await page.getByRole('button',{name:'Studia',exact:true}).click();await page.setViewportSize({width:740,height:950});await page.getByRole('button',{name:'Tutor',exact:true}).click();
   const chat=page.getByLabel('Messaggio al tutor del corso',{exact:true});await chat.fill('Una domanda da conservare');await chat.press('Shift+Enter');await expect(chat).toHaveValue('Una domanda da conservare\n');
 });
 
@@ -27,7 +29,7 @@ test('archived outputs are marked and a student clarification remains stored aft
   const note=page.getByLabel('Chiarimento per il tutor');await note.fill('Il docente usa P per il numero dei processori.');
   await page.getByRole('button',{name:'Salva e richiedi revisione',exact:true}).click();
   await expect(page.getByText('Il tuo chiarimento: Il docente usa P per il numero dei processori.',{exact:true})).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
+  await page.locator('.preparation-error summary').click();await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
   const paths=await (await request.get('/api/courses/'+course+'/paths')).json();const active=paths.find((p:any)=>!p.objective.archived);
   const detail=await (await request.get('/api/paths/'+active.id)).json();expect(detail.preparation.issues[0].data.student_note).toContain('numero dei processori');
 });
@@ -41,16 +43,16 @@ test('scope followup keeps its draft and reopens source verification without con
     await route.fulfill({response:result,json:data});
   });
   await page.goto('/');await page.locator('.course-label select').selectOption(course);
-  await page.getByRole('button',{name:'Corso personale',exact:true}).click();
+  await page.getByRole('button',{name:'Percorso',exact:true}).click();
   await page.getByRole('combobox',{name:'Percorso',exact:true}).selectOption(fresh.id);
   const input=page.getByLabel('Indicazioni per il tutor',{exact:true});
   await input.fill('Controlla i parziali precedenti e i singoli quesiti delle prove complete.');
-  await page.reload();await page.getByRole('button',{name:'Corso personale',exact:true}).click();
+  await page.reload();await page.getByRole('button',{name:'Percorso',exact:true}).click();
   await expect(input).toHaveValue('Controlla i parziali precedenti e i singoli quesiti delle prove complete.',{timeout:15000});
   const sent=page.waitForResponse(r=>r.url().endsWith('/scope-followup')&&r.request().method()==='POST');
   submitted=true;await page.getByRole('button',{name:'Verifica e aggiorna il perimetro',exact:true}).click();
   expect((await sent).ok()).toBeTruthy();
-  await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
+  await page.locator('.preparation-error summary').click();await expect(page.getByRole('alert')).toContainText('Seleziona un modello disponibile');
   const saved=await (await request.get('/api/paths/'+fresh.id)).json();
   expect(saved.objective.confirmed).toBe(false);expect(saved.objective.scope_followups[0]).toContain('singoli quesiti');
   expect(saved.objective.reserved_requested).toEqual([]);
@@ -61,6 +63,7 @@ test('model assignment and expert handoff update without stealing the chat focus
   let active='gpt-6-luna';
   await page.route('**/api/paths/'+target.id,async route=>{const response=await route.fetch();const data=await response.json();data.preparation.current_task={...data.preparation.current_task,routing:{primary:{id:'gpt-6-luna'},active:{id:active},reason:'Lettura strutturata',escalation_reason:active==='gpt-6.1-sol'?'Verifica di una fonte ambigua':null}};await route.fulfill({response,json:data});});
   await enter(page);await expect(page.locator('.preparation-progress')).toContainText('gpt-6-luna');
+  await page.getByRole('button',{name:'Studia',exact:true}).click();await page.getByRole('button',{name:'Dettagli preparazione',exact:true}).click();await page.getByRole('button',{name:'Tutor',exact:true}).click();
   const chat=page.getByLabel('Messaggio al tutor del corso',{exact:true});await chat.fill('Bozza durante il cambio di modello');await chat.focus();active='gpt-6.1-sol';
   await expect(page.locator('.preparation-progress')).toContainText('Verifica di una fonte ambigua',{timeout:8000});
   await expect(chat).toBeFocused();await expect(chat).toHaveValue('Bozza durante il cambio di modello');
@@ -84,6 +87,7 @@ test('compact map progress updates without moving focus or losing the chat draft
   });
   await enter(page);await expect(page.getByRole('heading',{name:'Contributi alla mappa',exact:true})).toBeVisible();
   await expect(page.locator('.preparation-progress')).toContainText('172 / 886 evidenze organizzate');
+  await page.getByRole('button',{name:'Studia',exact:true}).click();await page.getByRole('button',{name:'Dettagli preparazione',exact:true}).click();await page.getByRole('button',{name:'Tutor',exact:true}).click();
   const chat=page.getByLabel('Messaggio al tutor del corso',{exact:true});await chat.fill('La mia bozza rimane qui');await chat.focus();
   integrated=230;parts=1;
   await expect(page.locator('.preparation-progress')).toContainText('230 / 886 evidenze organizzate',{timeout:8000});

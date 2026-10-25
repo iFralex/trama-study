@@ -2,7 +2,7 @@
 
 > Il motore corrente è descritto in [Preparazione verificabile](PREPARAZIONE_VERIFICABILE.md). Le sezioni sulla preparazione a blocchi qui sotto documentano il motore precedente, conservato per gli archivi; non vengono riusate nella nuova preparazione.
 
-Apri **Corso personale** o **Crea o riprendi il piano del corso**. L’ultima vista e il corso vengono ricordati. I percorsi precedenti, comprese chat e attività della versione iniziale, restano nelle Sessioni.
+Apri **Studia** per riprendere la lettura oppure **Percorso** per creare o gestire un obiettivo. L’ultima vista e il corso vengono ricordati. I percorsi precedenti, comprese chat e attività della versione iniziale, restano nelle Sessioni.
 
 ## Avvio
 
@@ -27,7 +27,7 @@ Il sistema prepara il capitolo corrente e il successivo. Selezionare un capitolo
 
 ## Studio
 
-Indice, capitolo e chat sono affiancati sul desktop. Su schermi piccoli i pulsanti **Capitolo / Chat** cambiano vista conservando lo stato. Lo scorrimento aggiorna il punto letto dopo una breve pausa; il tutor riceve quel punto insieme al piano e alle fonti del capitolo. Il punto non è un’indicazione di comprensione.
+Il capitolo è la superficie principale. **Indice** apre i capitoli e può rimanere fissato sul desktop. **Tutor** e **Fonti** aprono un pannello laterale ridimensionabile con schede Tutor, Fonti e Cronologia. Su schermi piccoli il pannello si apre a tutto schermo; **Torna al capitolo** conserva posizione e bozze. Le operazioni di preparazione e il diario sono nel **Percorso**; richiami e simulazioni sono in **Allenamento**. Lo scorrimento aggiorna il punto letto dopo una breve pausa; il tutor riceve quel punto insieme al piano e alle fonti del capitolo. Il punto non è un’indicazione di comprensione.
 
 Le spiegazioni possono contenere Markdown, formule, pseudocodice e attività HTML. Fonti e materiali originali si aprono al riferimento esatto. Le attività dichiarano provenienza, ipotesi e, per i simulatori, modello rappresentato. Le soluzioni e le chiavi rimangono sul server prima della consegna o di una richiesta esplicita di aiuto.
 
