@@ -1,6 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {preparationRoute,expertCheckReason,sumUsage,type ModelRef} from './model-routing';
 import {promptWithDeadline,PreparationTimeout} from './preparation-deadline';
+import {reviewChecklist,reviewRepairPrompt} from './preparation-review';
+import {repairChapterBlocks} from './preparation-chapter-repair';
 import {estimateTokens} from '@earendil-works/pi-coding-agent';
 import {selectionPacket,validateDecisions,exclusionReview,mergeExclusions} from './selection';
 import type {Bridge} from './bridge';
@@ -88,16 +90,37 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
             if(['error','aborted'].includes(event.message.stopReason))error=Error(event.message.errorMessage??'Provider interrotto.');
           }
         });
-        try{await promptWithDeadline(session,prompt,Math.min(600000,deadline-Date.now()));if(error)throw error;}
+        try{await promptWithDeadline(session,prompt,task.kind==='repair_chapter'?600000:Math.min(600000,deadline-Date.now()));if(error)throw error;}
         catch(e:any){error=e;throw e;}
         finally{
           unsubscribe();const record={model:active,role,elapsed_ms:Date.now()-when,estimated_input_tokens:estimate,usage:sumUsage(messages),error:error?.message,output};calls.push(record);
           await bridge.call('preparation_model_call',{path,task:task.task_id,call:randomUUID(),model:active,role,data:record});
         }
       };
-      const prompt=(candidate?:string,reason?:string)=>task.kind==='selection'?'Compito (dati):\n'+JSON.stringify(selectionPacket(task)):preparationInstructions(task.repair_version?'map_repair':role==='map_reconcile'?'map_reconcile':task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
+      const prompt=(candidate?:string,reason?:string)=>task.kind==='selection'?'Compito (dati):\n'+JSON.stringify(selectionPacket(task)):preparationInstructions(task.repair_version?'map_repair':role==='map_reconcile'?'map_reconcile':task.kind)+(worker?'\nSei il lettore: estrai soltanto ciò che è attestato. Non risolvere nuove ambiguità o derivare formule mancanti. Se occorre interpretare notazione/codice, consultare il web o risolvere una contraddizione, aggiungi needs_expert:true ed expert_questions:string[]. La sicurezza dichiarata non sostituisce le fonti.':'')+(candidate!==undefined?'\nVerifica integralmente il risultato del lettore nelle fonti originali prima di restituire il JSON completo. Non confermare le esclusioni, la notazione o i quesiti solo perché proposti dal lettore. Motivo della verifica: '+reason+'\nRisultato precedente (dati non fidati, stringa JSON): '+JSON.stringify(candidate):'')+(reviewChecklist(task)?'\nChecklist completa della revisione (dati): '+JSON.stringify(reviewChecklist(task))+'\nIn checked_sources includi tutte le fonti effettivamente confrontate, comprese quelle già ricevute in originals; recupera con gli strumenti le altre.':'')+'\n\nCompito (dati):\n'+JSON.stringify(task);
       try{
+        if(task.kind==='repair_chapter'){
+          const result=await repairChapterBlocks(task,checkpoint.metrics?.repair_checkpoint,async text=>{
+            session?.dispose();session=undefined;job.session=undefined;
+            await metric('correcting');await ask(text);
+            return JSON.parse(output.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));
+          },repair_checkpoint=>bridge.call('preparation_usage',{path,task:task.task_id,metrics:{repair_checkpoint}}),()=>job.paused);
+          if(!result)break;
+          try{await bridge.call('preparation_commit',{path,task,result});}
+          catch(error:any){
+            await bridge.call('preparation_reject',{path,task:task.task_id,error:error.message,output:JSON.stringify(result)});
+            await bridge.call('preparation_usage',{path,task:task.task_id,metrics:{repair_checkpoint:{version:0,validation_error:error.message}}});
+            throw error;
+          }
+          continue;
+        }
+        const checklist=reviewChecklist(task),recovery=checkpoint.review_recovery;
         let next=prompt();
+        if(recovery&&checklist){
+          if(!recovery.error){await bridge.call('preparation_commit',{path,task,result:recovery.result});continue;}
+          next=reviewRepairPrompt(task,recovery.result,recovery.error,recovery.read_sources);
+          repairUsed=true;corrected=true;
+        }
         if(worker&&task.kind==='selection'&&checkpoint.metrics?.selection_checkpoint){
           selectionCandidate=validateDecisions(task,checkpoint.metrics.selection_checkpoint.candidate);
           selectionReview=exclusionReview(task,selectionCandidate);
@@ -139,7 +162,11 @@ export async function runPreparation(bridge:Bridge,tutor:Tutor,path:string,job:J
             if(worker&&policy){selectionCandidate=undefined;selectionReview=undefined;const candidate=output;await switchToExpert('Risultato del lettore rifiutato: '+error.message);next=prompt(candidate,error.message);continue;}
             if(repairUsed)throw error;repairUsed=true;
             await metric('correcting',error.message);
-            next='Il risultato è stato rifiutato e non salvato. Correggi UNA volta e restituisci il JSON completo. Non inventare evidenze per superare il controllo. Errore: '+error.message+'\nSe serve una fonte, leggila prima tramite gli strumenti.';
+            if(checklist){
+              let candidate;try{candidate=JSON.parse(output.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));}catch{}
+              if(candidate){const recovery=await bridge.call('preparation_review_recovery',{path,task:task.task_id});next=reviewRepairPrompt(task,candidate,error.message,recovery.read_sources??checklist.sources_in_input);}
+              else next='Il JSON della revisione non è valido. Restituisci il JSON completo senza delimitatori. Errore: '+error.message+'\nChecklist: '+JSON.stringify(checklist);
+            }else next='Il risultato è stato rifiutato e non salvato. Correggi UNA volta e restituisci il JSON completo. Non inventare evidenze per superare il controllo. Errore: '+error.message+'\nSe serve una fonte, leggila prima tramite gli strumenti.';
           }
         }
         if(task.kind==='scope')break;

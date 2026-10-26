@@ -486,7 +486,34 @@ class PreparationStudy(MapStudy):
             elif isinstance(source,list):
                 for v in source:register(v)
         register(task)
-        return {'started':True,'metrics':unpack(row['metrics'],{})}
+        return {'started':True,'metrics':unpack(row['metrics'],{}),'review_recovery':self._review_recovery(path,task)}
+
+    def _review_recovery(self,path,task):
+        """Reuse a rejected review of this exact immutable task, never an unchecked approval."""
+        if task['kind'] not in ('review_discipline','review_didactic'):return None
+        draft=task['draft'];blocks={b['id'] for b in draft['blocks']}
+        refs={ref for b in draft['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))}
+        best=None;score=(-1,-1)
+        for row in self.db.execute('SELECT output,error FROM prep_rejections WHERE path=? AND task=? ORDER BY rowid DESC LIMIT 6',(path,task['task_id'])):
+            if not row['error'].startswith(('La revisione deve','Citazione non letta')):continue
+            try:
+                result=json.loads(re.sub(r'^```(?:json)?\s*|\s*```$','',row['output'].strip()))
+                if not isinstance(result,dict) or not result.get('summary') or not isinstance(result.get('issues'),list):continue
+                checked=result.get('checked_sources',[]);checked_blocks=result.get('checked_blocks',[])
+                if not isinstance(checked,list) or not isinstance(checked_blocks,list) or any(not isinstance(s,str) for s in checked+checked_blocks):continue
+                candidate=(int(set(checked_blocks)==blocks),len(refs&set(checked)))
+                if candidate<=score:continue
+                try:self._review_result(path,task,result,draft);error=''
+                except ValueError as invalid:error=str(invalid)
+                best={'result':result,'error':error};score=candidate
+            except (ValueError,TypeError,KeyError):continue
+        if best is not None:best['read_sources']=[r[0] for r in self.db.execute('SELECT DISTINCT source FROM prep_reads WHERE task=? ORDER BY source',(task['task_id'],))]
+        return best
+
+    def preparation_review_recovery(self,path,task):
+        row=self.db.execute('SELECT input FROM prep_tasks WHERE path=? AND id=?',(path,task)).fetchone()
+        if not row:raise ValueError('Compito non trovato nel percorso.')
+        return self._review_recovery(path,unpack(row['input'])) or {'read_sources':[r[0] for r in self.db.execute('SELECT DISTINCT source FROM prep_reads WHERE task=? ORDER BY source',(task,))]}
 
     def preparation_read(self,task,result,method='tool'):
         row=self.db.execute('SELECT path,state FROM prep_tasks WHERE id=?',(task,)).fetchone()
@@ -518,7 +545,8 @@ class PreparationStudy(MapStudy):
     def _prep_refs(self,path,task,refs):
         refs=self._refs(self._path(path)['course'],refs)
         allowed={r[0] for r in self.db.execute('SELECT source FROM prep_reads WHERE task=?',(task['task_id'],))}
-        if not set(refs)<=allowed:raise ValueError('Citazione non letta nel compito: usa read_source o read_material prima di citarla.')
+        unread=set(refs)-allowed
+        if unread:raise ValueError('Citazione non letta nel compito: '+pack(sorted(unread))+'. Usa read_source o read_material prima di citarla; non inventare una lettura.')
         return refs
 
     def preparation_commit(self,path,task,result):
@@ -671,9 +699,10 @@ class PreparationStudy(MapStudy):
         if draft:
             expected={b['id'] for b in draft['blocks']}
             refs={ref for b in draft['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))}
-            if set(result.get('checked_blocks',[]))!=expected:raise ValueError('La revisione deve coprire tutti i blocchi del capitolo.')
-            if not refs<=set(result.get('checked_sources',[])):raise ValueError('La revisione deve verificare le fonti dei blocchi.')
-            for ref in refs:self._prep_refs(path,task,[ref])
+            if set(result.get('checked_blocks',[]))!=expected:raise ValueError('La revisione deve coprire tutti i blocchi del capitolo. Blocchi mancanti: '+pack(sorted(expected-set(result.get('checked_blocks',[]))))+'.')
+            missing=refs-set(result.get('checked_sources',[]))
+            if missing:raise ValueError('La revisione deve verificare le fonti dei blocchi. Fonti mancanti in checked_sources: '+pack(sorted(missing))+'. Includi anche gli originali già forniti nel compito, dopo averli confrontati; non limitarti alle letture aggiuntive via strumenti.')
+            for ref in set(result.get('checked_sources',[])):self._prep_refs(path,task,[ref])
         elif task['kind']=='map_review':
             if set(result.get('checked_objectives',[]))!=set(range(len(self._path(path)['objective']['included']))):raise ValueError('La revisione deve coprire tutti gli obiettivi.')
         blocks={b['id'] for b in draft['blocks']} if draft else None
@@ -777,7 +806,11 @@ class PreparationStudy(MapStudy):
         current=self.db.execute('SELECT kind,state,started,error,attempts,metrics FROM prep_tasks WHERE id=?',(run['current'],)).fetchone() if run['current'] else None
         counts=dict(self.db.execute('SELECT state,count(*) FROM prep_tasks WHERE path=? GROUP BY state',(path,)).fetchall())
         details=dict(current) if current else None
-        if details:details['routing']=unpack(details.get('metrics'),{}).get('routing')
+        if details:
+            metrics=unpack(details.get('metrics'),{});details['routing']=metrics.get('routing')
+            repair=metrics.get('repair_checkpoint',{})
+            if details['kind']=='repair_chapter' and repair.get('version')==1:
+                details['repair_progress']={'done':len(repair.get('blocks',[])),'total':len(repair.get('targets',[]))}
         mapping=None
         if self._path(path)['objective'].get('map_strategy')==STRATEGY:
             row=self.db.execute('SELECT build,manifest FROM prep_map_builds WHERE path=? ORDER BY rowid DESC LIMIT 1',(path,)).fetchone()

@@ -1,11 +1,11 @@
 import {test,expect,type Page} from '@playwright/test';
 
-async function fixture(page:Page,options:{openAnswer?:boolean}={}){
+async function fixture(page:Page,options:{openAnswer?:boolean,missingAssessment?:boolean}={}){
   const formula=String.raw`F=(a_0\land b_0)\lor(a_1\land b_1)\lor(a_2\land b_2)\lor(a_3\land b_3).`;
   const activity={id:'boolean-activity',version:1,state:{},created:'2026-01-01',spec:{kind:'completion',title:"Completa l'aggregazione booleana",prompt:'Calcola\n\n$$'+formula+'$$\n\nLe coppie di input occupano otto celle distinte.',curriculum:{chapter:'boolean'},origin:'generated',sources:['passage-1']}};
   const session:any={session:{id:'workspace-session',mode:'learn',minutes:25,goal:'Test',course:'workspace-course',current:activity.id},curriculum:{path:'workspace-path'},activities:[activity],messages:[],attempts:[],progress:[]};
   const path:any={id:'workspace-path',sid:session.session.id,status:'ready',objective:{request:'Primo parziale',summary:'Primo parziale',included:['PRAM'],engine:2},coverage:[],plan:{version:1,data:{final:true}},chapters:[{id:'boolean',title:'PRAM e aggregazione',objective:'Comprendere gli accessi concorrenti.',ready:true,version:1},{id:'reduction',title:'Riduzione parallela',ready:true,version:1}],position:{chapter:'boolean',block:'intro'},current:{chapter:'boolean',version:1,content:{review:true,blocks:[{id:'intro',kind:'text',text:'Un algoritmo combina passi elementari. Seleziona questa frase per discuterne.\n\nIl costo è $T(n)=an+b$.\n\n'+('Un esempio concreto da leggere.\n\n'.repeat(12)),sources:['passage-1']},{id:'exercise',kind:'activity',activity:activity.id,activity_version:1},{id:'conclusion',kind:'text',text:'Ora confronta i due procedimenti.',sources:[]}]}},profile:{total:0,formats:{},questions:[]},recalls:[],journal:[],revisions:[],reservations:[]};
-  const state={path,session,reads:0,chats:[] as string[],searches:[] as string[]};
+  const state={path,session,reads:0,assessmentRequests:0,chats:[] as string[],searches:[] as string[]};
   await page.addInitScript(()=>{localStorage.setItem('studio-last-view','corso');localStorage.setItem('studio-math-reading','text');});
   await page.route('**/*',async route=>{
     if(new URL(route.request().url()).pathname.startsWith('/api/'))return route.fallback();
@@ -25,6 +25,7 @@ async function fixture(page:Page,options:{openAnswer?:boolean}={}){
       if(event.kind==='submit'){const attempt={id:'attempt-1',activity:activity.id,version:1,grade:{status:'provisional',correct:options.openAnswer?null:false,feedback:options.openAnswer?'Risposta salvata. La valutazione aperta richiede il tutor o una tua autovalutazione.':'Rivedi quali processori propongono il valore 1.'}};session.attempts=[attempt];data={attempt};}
       else{activity.state={...activity.state,...event.payload};}
     }
+    else if(pathname.endsWith('/assess')){state.assessmentRequests++;const attempt=session.attempts.find((a:any)=>a.id===request.postDataJSON().attempt_id);if(attempt&&!options.missingAssessment&&!attempt.grade.previous)attempt.grade={...attempt.grade,correct:attempt.grade.correct??false,feedback:options.openAnswer?'Precisa quali processori scrivono.':attempt.grade.feedback,previous:attempt.grade};data=attempt?.grade??{};}
     else if(pathname.endsWith('/chat')){
       state.chats.push(request.postDataJSON().text);
       session.messages.push({id:'reply-'+state.chats.length,role:'assistant',text:'Consideriamo il passaggio selezionato.',created:'2026-01-02'});
@@ -146,10 +147,10 @@ test('original materials can be browsed by folder and opened at their source',as
 test('open answers show automatic correction in progress and replace it with the saved assessment',async({page})=>{
   const state=await fixture(page,{openAnswer:true});
   let finish!:()=>void;const waiting=new Promise<void>(resolve=>finish=resolve);
-  await page.route('**/api/sessions/*/chat',async route=>{
+  await page.route('**/api/sessions/*/assess',async route=>{
     await waiting;const attempt=state.session.attempts[0];
     attempt.grade={status:'provisional',correct:true,feedback:'Il ragionamento è corretto: scrivono solo i processori con termine vero.',previous:attempt.grade};
-    await route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({type:'delta',text:'Confrontiamo il tuo ragionamento con la regola Common.'})+'\n\n'});
+    await route.fulfill({json:attempt.grade});
   });
   const activity=page.locator('[data-activity-id="boolean-activity"]');
   await activity.getByLabel('La tua risposta',{exact:true}).fill('Scrivono solo i processori con termine vero.');
@@ -165,11 +166,12 @@ test('open answers show automatic correction in progress and replace it with the
   await expect(feedback).toContainText('Il ragionamento è corretto');
   await expect(feedback).not.toContainText('CORREZIONE IN CORSO');
   await expect(feedback).toContainText('Prossimo passo');
+  expect(state.chats).toEqual([]);
 });
 
 test('failed correction keeps the answer and offers a tracked retry beside the exercise',async({page})=>{
   const state=await fixture(page,{openAnswer:true});
-  await page.route('**/api/sessions/*/chat',route=>route.fulfill({status:503,json:{error:'Provider temporaneamente non disponibile.'}}));
+  await page.route('**/api/sessions/*/assess',route=>route.fulfill({status:503,json:{error:'Provider temporaneamente non disponibile.'}}));
   const activity=page.locator('[data-activity-id="boolean-activity"]');
   const answer=activity.getByLabel('La tua risposta',{exact:true});await answer.fill('La mia risposta resta salvata.');
   await activity.getByRole('button',{name:'Verifica risposta',exact:true}).click();
@@ -185,18 +187,17 @@ test('failed correction keeps the answer and offers a tracked retry beside the e
   await expect(feedback).not.toContainText('CORREZIONE NON COMPLETATA');
 });
 
-test('a tutor explanation appears inline even when no structured assessment was saved',async({page})=>{
-  await fixture(page,{openAnswer:true});
+test('an unsaved assessment never triggers an extra chat call or appears as a completed grade',async({page})=>{
+  const state=await fixture(page,{openAnswer:true,missingAssessment:true});
   const activity=page.locator('[data-activity-id="boolean-activity"]');
   await activity.getByLabel('La tua risposta',{exact:true}).fill('La mia spiegazione.');
   await activity.getByRole('button',{name:'Verifica risposta',exact:true}).click();
   const feedback=activity.getByLabel('Riscontro sulla risposta');
-  await expect(feedback).toContainText('RISCONTRO DEL TUTOR');
-  await expect(feedback).toContainText('Consideriamo il passaggio selezionato.');
-  await expect(feedback).not.toContainText('richiede il tutor o una tua autovalutazione');
-  await expect(feedback).not.toContainText('rivedi il ragionamento usando il riscontro e prova di nuovo');
+  await expect(feedback).toContainText('RISPOSTA SALVATA');
+  await expect(feedback).toContainText('La correzione del tutor non è ancora disponibile.');
+  await expect(feedback).not.toContainText('Prossimo passo');
+  expect(state.chats).toEqual([]);expect(state.assessmentRequests).toBe(1);
 });
-
 
 test('a failed view refresh after submission reports the saved answer without leaving correction pending',async({page})=>{
   await fixture(page,{openAnswer:true});
@@ -208,4 +209,33 @@ test('a failed view refresh after submission reports the saved answer without le
   await expect(page.getByRole('alert')).toContainText('Risposta salvata');
   await expect(activity.getByLabel('Riscontro sulla risposta')).toContainText('CORREZIONE NON COMPLETATA',{timeout:8000});
   await expect(activity.getByRole('button',{name:'Riprova la correzione',exact:true})).toBeEnabled();
+});
+
+
+test('one assessment is generated automatically and an interrupted optional explanation can resume without regrading',async({page})=>{
+  const state=await fixture(page,{openAnswer:true});let requests=0,assessments=0;
+  await page.route('**/api/sessions/*/assess',async route=>{assessments++;await route.fallback();});
+  await page.route('**/api/sessions/*/chat',async route=>{
+    requests++;expect(route.request().postDataJSON().attemptId).toBe('attempt-1');
+    if(requests===1)await route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({type:'error',error:'OpenAI Responses stream ended before a terminal response event',view:state.session})+'\n\n'});
+    else{state.session.messages.push({id:'explanation',role:'assistant',text:'Privati significa che gli altri processori non li leggono direttamente.',created:'2026-01-03'});await route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({type:'delta',text:'Privati significa che gli altri processori non li leggono direttamente.'})+'\n\n'});}
+  });
+  const activity=page.locator('[data-activity-id="boolean-activity"]');
+  await activity.getByLabel('La tua risposta',{exact:true}).fill('Conservano valori.');
+  await activity.getByRole('button',{name:'Verifica risposta',exact:true}).click();
+  const feedback=activity.getByLabel('Riscontro sulla risposta');
+  await expect(feedback).toContainText('VALUTAZIONE DEL TUTOR · PROVVISORIA');
+  expect(assessments).toBe(1);expect(requests).toBe(0);expect(state.session.messages).toHaveLength(0);
+  await feedback.getByRole('button',{name:'Spiega la valutazione',exact:true}).click();
+  await expect(feedback).toContainText('La valutazione qui sotto è completa e salvata.');
+  await expect(feedback).toContainText('Precisa quali processori scrivono.');
+  await expect(feedback.getByRole('button',{name:'Riprova la correzione'})).toHaveCount(0);
+  await expect(feedback.getByText('OpenAI Responses stream ended before a terminal response event',{exact:true})).toBeHidden();
+  await feedback.getByRole('button',{name:'Riprendi la spiegazione',exact:true}).click();
+  await expect(feedback.getByRole('button',{name:'Riprendi la spiegazione'})).toHaveCount(0);
+  await expect(feedback).not.toContainText('Privati significa');
+  await expect(page.getByLabel('Chat sul capitolo')).toContainText('Privati significa');
+  expect(assessments).toBe(1);expect(requests).toBe(2);
+  await page.reload();
+  await expect(page.locator('[data-activity-id="boolean-activity"]').getByRole('button',{name:'Spiega la valutazione',exact:true})).toBeVisible();
 });

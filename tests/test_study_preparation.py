@@ -51,6 +51,47 @@ class PreparationTest(unittest.TestCase):
     def review(self,task,blocking=False):
         return {'summary':'Revisione completa','checked_blocks':[b['id'] for b in task['draft']['blocks']],'checked_sources':list({r for b in task['draft']['blocks'] for r in b.get('sources',b.get('spec',{}).get('sources',[]))}),'issues':[{'block':'intro','severity':'blocking','message':'Definizione da chiarire','sources':self.content()['blocks'][0]['sources']}] if blocking else []}
 
+    def review_task(self):
+        chapter=self.to_chapter();self.commit(chapter,self.content())
+        self.commit(self.task(),{'solutions':[{'block':'exercise','answer':3,'reasoning':'Tre livelli'}]})
+        task=self.task();self.store.preparation_begin(self.path,task)
+        return task
+
+    def test_review_error_names_missing_sources_and_counts_originals_supplied_in_input(self):
+        task=self.review_task();result=self.review(task);ref=result['checked_sources'][0]
+        result['checked_sources']=[]
+        with self.assertRaisesRegex(ValueError,'Fonti mancanti in checked_sources') as error:self.store.preparation_commit(self.path,task,result)
+        self.assertIn(ref,str(error.exception));self.assertIn('originali già forniti',str(error.exception))
+        valid=self.review(task);self.store.preparation_commit(self.path,task,valid)
+        self.assertEqual(self.task()['kind'],'review_didactic')
+
+    def test_review_recovery_preserves_complete_prior_review_without_accepting_unread_citations(self):
+        task=self.review_task();result=self.review(task)
+        other=self.store.db.execute("SELECT id FROM passages WHERE course=? AND kind='video'",(self.course,)).fetchone()[0]
+        result['checked_sources'].append(other)
+        result['issues']=[{'block':'intro','severity':'warning','message':'Confronta questa fonte aggiuntiva.','sources':[other]}]
+        with self.assertRaisesRegex(ValueError,'Citazione non letta') as error:self.store.preparation_commit(self.path,task,result)
+        self.assertIn(other,str(error.exception))
+        self.store.preparation_reject(self.path,task['task_id'],str(error.exception),pack(result))
+        partial=dict(result,checked_sources=[],issues=[])
+        self.store.preparation_reject(self.path,task['task_id'],'La revisione deve verificare le fonti dei blocchi.',pack(partial))
+        self.store.preparation_metric(self.path,task['task_id'],'error','La revisione deve verificare le fonti dei blocchi.')
+        recovered=self.store.preparation_begin(self.path,task)['review_recovery']
+        self.assertEqual(recovered['result'],result);self.assertIn(other,recovered['error'])
+        self.assertNotIn(other,recovered['read_sources'])
+        self.assertIsNone(self.store.db.execute('SELECT discipline FROM prep_drafts WHERE path=? AND chapter=?',(self.path,'pram')).fetchone()[0])
+        self.store.preparation_read(task['task_id'],self.store.source(other),'read_source')
+        self.store.preparation_commit(self.path,task,recovered['result'])
+        self.assertEqual(self.task()['kind'],'review_didactic')
+
+    def test_review_checks_bibliographies_longer_than_thirty_sources_without_reducing_coverage(self):
+        task=self.review_task();refs=self.many_references()
+        task=copy.deepcopy(task);task['draft']['blocks'][0]['sources']=refs[:33]
+        for ref in refs[:33]:self.store.preparation_read(task['task_id'],self.store.source(ref),'read_source')
+        result=self.review(task);self.store._review_result(self.path,task,result,task['draft'])
+        result['checked_sources'].append(refs[-1])
+        with self.assertRaisesRegex(ValueError,'Citazione non letta'):self.store._review_result(self.path,task,result,task['draft'])
+
     def many_references(self):
         file=self.root/'corsi'/self.course/'materiali'/'many-references.pdf'
         doc=fixtures.pymupdf.open()

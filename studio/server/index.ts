@@ -140,7 +140,7 @@ app.post('/api/sessions/:sid/chat',run(async(req,res)=>{
   res.setHeader('Content-Type','text/event-stream');res.setHeader('Cache-Control','no-cache');res.flushHeaders();
   const send=(type:string,data:any)=>res.write(`data: ${JSON.stringify({type,...data})}\n\n`);
   const abort=()=>{void tutor.active.get(sid)?.abort();};res.on('close',abort);
-  try{await tutor.chat(sid,text,delta=>send('delta',{text:delta}),req.body.automatic===true);send('done',{view:await bridge.call('view',{sid})});}
+  try{await tutor.chat(sid,text,delta=>send('delta',{text:delta}),req.body.automatic===true,typeof req.body.attemptId==='string'?req.body.attemptId:undefined);send('done',{view:await bridge.call('view',{sid})});}
   catch(error:any){send('error',{error:error.message,view:await bridge.call('view',{sid})});}
   finally{res.off('close',abort);res.end();}
 }));

@@ -129,3 +129,15 @@ Le correzioni successive a una revisione usano un delta sul piano corrente, anzi
 
 
 Il limite strutturale dei capitoli è esplicito in `chapter_limits`: al massimo 48 blocchi e 180000 caratteri. Spiegazioni ed esercizi brevi possono superare i precedenti 24 blocchi senza rendere invalido il capitolo. I messaggi di errore distinguono numero di blocchi, tipo del campo e dimensione effettiva; il modello riceve gli stessi limiti applicati dal servizio. Non si riduce il controllo di citazioni, soluzioni, provenienza o revisioni. Un risultato precedentemente rifiutato per il solo numero di blocchi può essere recuperato integralmente dal registro della chiamata, dopo rivalidazione ordinaria: non richiede una nuova generazione e non è pubblicato prima delle revisioni.
+
+### Ripresa di una revisione con citazioni incomplete
+
+Il validatore elenca gli ID mancanti in `checked_sources` e le citazioni prive di una lettura registrata. Le fonti originali incluse nell’input e quelle recuperate con strumenti appartengono allo stesso inventario cumulativo; riceverle non equivale a dichiararle automaticamente verificate.
+
+Se un controllo sulle fonti interrompe la revisione, la ripresa può riutilizzare un risultato rifiutato dello stesso compito immutato e le relative ricevute di lettura. La riparazione riceve il risultato precedente, i controlli mancanti e i blocchi da ricontrollare, con una sola richiesta di riparazione prima di fermarsi di nuovo in caso di errore. Nessuna fonte viene aggiunta automaticamente fra quelle verificate e tutti i controlli restano obbligatori prima della pubblicazione.
+
+### Correzione del capitolo senza rigenerazione integrale
+
+`repair_chapter` corregge separatamente i blocchi citati nei rilievi disciplinari e didattici, inclusi i warning. Ogni richiesta restituisce un solo blocco completo con identità e tipo invariati; i blocchi senza rilievi restano identici. Il contesto contiene i blocchi vicini e le dipendenze, l'indice e le fonti pertinenti, senza ripetere tutto il capitolo o il profilo degli esami. Rilievi globali senza un blocco identificabile richiedono una verifica a blocchi dell'intero capitolo.
+
+Ogni sostituzione completa viene salvata nelle metriche del compito immutato. Dopo una pausa o un errore del provider si riparte dal blocco mancante. Un risultato parziale non diventa mai una bozza pubblicabile: il capitolo ricomposto passa gli stessi controlli di fonti, struttura e modelli deterministici, poi nuove revisioni indipendenti. Una bocciatura del capitolo ricomposto invalida il checkpoint di correzione e conserva l'errore per il tentativo successivo. La UI mostra quanti blocchi corretti sono stati salvati.
