@@ -1,3 +1,14 @@
+import {isDeepStrictEqual} from 'node:util';
+
+/** The canonical chapter stays at /chapter; its exact copy in the plan becomes a pointer. */
+export function deduplicateCurrentChapter<T>(data:T):T{
+  const task=data as any,chapters=task?.plan?.data?.chapters;
+  if(!task?.chapter||!Array.isArray(chapters))return data;
+  const matches=chapters.map((chapter:any)=>isDeepStrictEqual(chapter,task.chapter));
+  if(!matches.some(Boolean))return data;
+  return {...task,plan:{...task.plan,data:{...task.plan.data,chapters:chapters.map((chapter:any,index:number)=>matches[index]?{$ref:'#/chapter'}:chapter)}}};
+}
+
 /** Share only identical passage text. Every occurrence keeps its own metadata and position. */
 export function deduplicateSourceTexts<T>(data:T):T{
   if(!data||typeof data!=='object'||Array.isArray(data)||Object.hasOwn(data,'_source_texts'))return data;

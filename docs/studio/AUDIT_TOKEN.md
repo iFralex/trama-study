@@ -49,3 +49,7 @@ Prima applicazione consigliata: deduplicazione esatta delle fonti e del capitolo
 ## Implementazione: testi delle fonti condivisi
 
 I pacchetti di preparazione, correzione dei blocchi e valutazione isolata ora sostituiscono le ripetizioni identiche di `(passage ID, testo)` con riferimenti JSON Pointer alla tabella `_source_texts` dello stesso messaggio. Ogni occorrenza mantiene i propri metadati, contesti e ordine. Testi differenti dello stesso ID rimangono distinti; non si riutilizza testo fra sessioni o revisori. La trasformazione non modifica il task salvato né le ricevute di lettura. Con fonti uniche, testi brevi o un pacchetto che non diventa più piccolo, il formato resta identico al precedente. La chat ordinaria resta invariata. I test ricostruiscono il contenuto originale e verificano anche i pacchetti realmente inviati dall'SDK.
+
+## Implementazione: capitolo corrente senza doppia copia
+
+Quando `chapter` coincide integralmente con una voce di `plan.data.chapters`, il pacchetto per il modello conserva il capitolo completo in `chapter` e sostituisce la voce nel piano con `{"$ref":"#/chapter"}`. Il piano mantiene ordine, prerequisiti e altre voci; nessun capitolo solo simile o con lo stesso ID ma dati diversi viene sostituito. Il task originale persiste immutato e passa ancora al commit ordinario. I test controllano la ricostruzione esatta e la preparazione completa con SDK.

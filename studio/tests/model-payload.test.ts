@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {deduplicateSourceTexts} from '../server/model-payload';
+import {deduplicateCurrentChapter,deduplicateSourceTexts} from '../server/model-payload';
 
 import {expandSources} from './helpers/model-payload';
 const text='La fonte mantiene formule, convenzioni, codice e ipotesi. '.repeat(60);
@@ -19,4 +19,19 @@ test('different text for the same passage ID is never conflated and revision met
 });
 test('unique sources, small text and reserved-field collisions retain the exact input format',()=>{
  for(const original of [{sources:[{id:'a',page:1,text}]},{sources:[{id:'a',page:1,text:'Short'},{id:'a',page:1,text:'Short'}]},{_source_texts:{original:'keep'},sources:[{id:'a',page:1,text},{id:'a',page:1,text}]}])assert.equal(deduplicateSourceTexts(original),original);
+});
+
+test('the complete current chapter occurs once and the plan keeps its position via a pointer',()=>{
+ const chapter={id:'pram',title:'PRAM',objective:'Teach the model',sources:['a'],prerequisites:['intro']};
+ const original={kind:'chapter',chapter,plan:{version:2,data:{chapters:[{id:'intro'},structuredClone(chapter),{id:'next'}],gaps:['Keep uncertainty']}}};
+ const before=structuredClone(original),packet=deduplicateCurrentChapter(original) as any;
+ assert.deepEqual(packet.chapter,chapter);assert.deepEqual(packet.plan.data.chapters[1],{$ref:'#/chapter'});
+ const restored=structuredClone(packet);restored.plan.data.chapters[1]=structuredClone(restored.chapter);
+ assert.deepEqual(restored,original);assert.deepEqual(original,before);
+ assert.ok(JSON.stringify(packet).length<JSON.stringify(original).length);
+});
+test('chapters with the same ID but different data cannot be substituted',()=>{
+ const original={chapter:{id:'pram',sources:['new']},plan:{data:{chapters:[{id:'pram',sources:['old']}]}}};
+ assert.equal(deduplicateCurrentChapter(original),original);
+ assert.equal(deduplicateCurrentChapter({kind:'review_solve'}).kind,'review_solve');
 });
