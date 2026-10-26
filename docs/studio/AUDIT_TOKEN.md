@@ -45,3 +45,7 @@ I risparmi delle righe non si possono sommare come percentuali globali: riguarda
 5. Per cambiamenti alle istruzioni o selezione del contesto, confrontare accuratezza delle correzioni, citazioni, completezza didattica e comportamento degli strumenti. I soli test strutturali non possono escludere regressioni delle risposte generate.
 
 Prima applicazione consigliata: deduplicazione esatta delle fonti e del capitolo corrente, poi separazione dei metadati locali. La gestione degli aggiornamenti della chat è il candidato più grande, ma richiede un intervento più articolato.
+
+## Implementazione: testi delle fonti condivisi
+
+I pacchetti di preparazione, correzione dei blocchi e valutazione isolata ora sostituiscono le ripetizioni identiche di `(passage ID, testo)` con riferimenti JSON Pointer alla tabella `_source_texts` dello stesso messaggio. Ogni occorrenza mantiene i propri metadati, contesti e ordine. Testi differenti dello stesso ID rimangono distinti; non si riutilizza testo fra sessioni o revisori. La trasformazione non modifica il task salvato né le ricevute di lettura. Con fonti uniche, testi brevi o un pacchetto che non diventa più piccolo, il formato resta identico al precedente. La chat ordinaria resta invariata. I test ricostruiscono il contenuto originale e verificano anche i pacchetti realmente inviati dall'SDK.

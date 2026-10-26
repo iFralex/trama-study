@@ -7,18 +7,21 @@ import path from 'node:path';
 import {ModelRuntime} from '@earendil-works/pi-coding-agent';
 import {Tutor} from '../server/tutor';
 import type {Bridge} from '../server/bridge';
+import {expandSources} from './helpers/model-payload';
 
 test('real SDK review can save an isolated assessment and journal evidence; explanation cannot repeat either',async()=>{
   const root=await mkdtemp(path.join(os.tmpdir(),'attempt-review-sdk-'));
   const requests:any[]=[],calls:string[]=[],messages:any[]=[];let step=0;
   let grade:any={status:'provisional',correct:null,feedback:'Risposta salvata.'};
+  const sourceText='Ogni processore ha registri privati. '.repeat(50);
+  const sources=[{id:'source',document:'doc',page:1,text:sourceText,context:[{id:'adjacent',page:2,text:sourceText}]},{id:'adjacent',document:'doc',page:2,text:sourceText,context:[{id:'source',page:1,text:sourceText}]}];
   const activity={id:'exercise',version:1,spec:{kind:'open',prompt:'Di chi sono i registri PRAM?',rubric:'Natura privata.',sources:['source'],curriculum:{chapter:'pram'}}};
   const context={session:{id:'session',course:'course',mode:'learn'},curriculum:{path:'path',chapter:'pram',history:'HISTORY_DO_NOT_SEND'.repeat(10000)},activities:[activity],attempts:[]};
   const bridge={async call(method:string,args:any={}){
     calls.push(method);
     if(method==='setting')return null;
     if(method==='view'||method==='context')return context;
-    if(method==='assessment')return {attempt:{id:'attempt',answer:'Appartengono al singolo processore.',grade},activity,sources:[{id:'source',text:'Ogni processore ha registri privati.'}]};
+    if(method==='assessment')return {attempt:{id:'attempt',answer:'Appartengono al singolo processore.',grade},activity,sources};
     if(method==='assess'){grade={...args.grade,status:'provisional',previous:grade};return grade;}
     if(method==='course_note')return {id:'note'};
     if(method==='course_recall_card')return {duplicate:true};
@@ -63,6 +66,9 @@ test('real SDK review can save an isolated assessment and journal evidence; expl
     const compact=await tutor.assess('session','attempt');
     assert.equal(compact.correct,true);assert.equal(requests.length,before+1);
     assert.equal(requests.at(-1).tools?.length??0,0);
+    const content=requests.at(-1).messages.at(-1).content;
+    const packet=JSON.parse(typeof content==='string'?content:content.map((p:any)=>p.text??'').join(''));
+    assert.ok(packet._source_texts);assert.deepEqual(expandSources(packet).sources,sources);
     assert.equal(calls.filter(c=>c==='course_note').length,notesBefore);assert.equal(messages.length,messagesBefore);
     assert.equal(tutor.active.size,0);assert.equal(tutor.busySessions.size,0);
     await tutor.assess('session','attempt');assert.equal(requests.length,before+1,'saved assessments must not spend another model call');

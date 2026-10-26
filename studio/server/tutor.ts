@@ -10,6 +10,7 @@ import {scheduleCourseRecall} from './course-reviews';
 import {sourceBudget} from './preparation-engine';
 import {routingConfig,type ModelRef} from './model-routing';
 import {SELECTION_SYSTEM} from './selection';
+import {deduplicateSourceTexts} from './model-payload';
 
 const SYSTEM=`Sei un tutor universitario personale. Parla in italiano, conserva la terminologia tecnica del corso.
 Usa le fonti del corso prima di affermare cosa dice il docente. Cita passaggi con [titolo](source:ID), solo ID effettivamente recuperati.
@@ -164,7 +165,7 @@ export class Tutor {
       });
       const timer=setTimeout(()=>{expired=true;void session!.abort().catch(()=>{});},90000);
       try{
-        await session.prompt(JSON.stringify({question:activity.spec.prompt,rubric:activity.spec.rubric,answer:attempt.answer,sources,solution:activity.spec.solution??null}));
+        await session.prompt(JSON.stringify(deduplicateSourceTexts({question:activity.spec.prompt,rubric:activity.spec.rubric,answer:attempt.answer,sources,solution:activity.spec.solution??null})));
         if(expired)throw Error('Tempo limite della correzione raggiunto. La risposta rimane salvata.');
         if(runError)throw runError;
         const grade=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));
