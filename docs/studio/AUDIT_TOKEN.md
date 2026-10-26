@@ -68,3 +68,8 @@ Verifica finale: 59 test TypeScript passati, inclusi i flussi con SDK, più cont
 | Valutazione di un tentativo | 23.321 | 18.942 | 18.942 | 18.942 |
 
 Sono dimensioni dei dati JSON, non token misurati dal provider né risparmi economici garantiti. Le risposte generate non sono state confrontate con chiamate aggiuntive sul materiale dell'utente; la conservazione dei dati e i flussi applicativi sono verificati dai test.
+
+
+## Attivazione successiva del contesto compatto della chat
+
+Dopo il confronto sui dati reali e l'accettazione dell'utente, la chat del percorso usa il contesto conservativo con indice del piano e recupero integrale dei dettagli. Capitolo corrente, obiettivo, diario e dati di studio restano completi. Anche gli strumenti di lettura dello stato evitano copie automatiche del piano; le letture mirate e il fallback integrale usano lo stato corrente della sessione. Misure, limiti e copertura dei test sono in `CONFRONTO_CONTESTO_CHAT.md`.
