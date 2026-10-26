@@ -32,7 +32,7 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
   const server=createServer(async(req,res)=>{
     let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);payloads.push(body);
     const message=[...body.messages].reverse().find((m:any)=>m.role==='user');const text=typeof message.content==='string'?message.content:message.content.map((p:any)=>p.text??'').join('');
-    const task=text.includes('Compito (dati):\n')?JSON.parse(text.split('Compito (dati):\n').at(-1)):currentTask;currentTask=task;phases.push(task.kind);trace.push({kind:task.kind,model:body.model});let output:any;
+    const task=text.includes('Compito (dati):\n')?JSON.parse(text.split('Compito (dati):\n').at(-1)):currentTask;currentTask=task;for(const key of ['task_id','model_key','budget','source_revisions'])assert.equal(Object.hasOwn(task,key),false,'Local checkpoint metadata must stay in the bridge');phases.push(task.kind);trace.push({kind:task.kind,model:body.model});let output:any;
     if(quota&&body.model==='reader'){res.statusCode=400;res.end(JSON.stringify({error:{message:'The ChatGPT user has reached their Subscription Sharing usage limit.',type:'insufficient_quota',code:'quota_exceeded'}}));return;}
     if(resumeExpert&&task.kind==='selection'&&body.model==='test'&&!failedExclusionOnce){failedExclusionOnce=true;res.statusCode=400;res.end(JSON.stringify({error:{message:'Expert interrupted for checkpoint test'}}));return;}
     if(task.kind==='scope')output={summary:'Primo parziale: PRAM',included:['PRAM'],excluded:['Secondo parziale'],clarification:null};

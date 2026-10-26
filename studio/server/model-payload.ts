@@ -1,5 +1,11 @@
 import {isDeepStrictEqual} from 'node:util';
 
+/** Local checkpoint identity and integrity stay on the original task, never in model context. */
+export function preparationModelData<T>(task:T):T{
+  const {task_id,model_key,budget,source_revisions,...content}=task as any;
+  return deduplicateSourceTexts(deduplicateCurrentChapter(content)) as T;
+}
+
 /** The canonical chapter stays at /chapter; its exact copy in the plan becomes a pointer. */
 export function deduplicateCurrentChapter<T>(data:T):T{
   const task=data as any,chapters=task?.plan?.data?.chapters;

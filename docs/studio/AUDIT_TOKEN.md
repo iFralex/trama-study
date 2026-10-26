@@ -53,3 +53,18 @@ I pacchetti di preparazione, correzione dei blocchi e valutazione isolata ora so
 ## Implementazione: capitolo corrente senza doppia copia
 
 Quando `chapter` coincide integralmente con una voce di `plan.data.chapters`, il pacchetto per il modello conserva il capitolo completo in `chapter` e sostituisce la voce nel piano con `{"$ref":"#/chapter"}`. Il piano mantiene ordine, prerequisiti e altre voci; nessun capitolo solo simile o con lo stesso ID ma dati diversi viene sostituito. Il task originale persiste immutato e passa ancora al commit ordinario. I test controllano la ricostruzione esatta e la preparazione completa con SDK.
+
+## Implementazione: metadati dei checkpoint locali
+
+`preparationModelData` esclude dal solo pacchetto per il modello i quattro campi radice `task_id`, `model_key`, `budget` e `source_revisions`. Il task originale continua a essere usato da `preparation_begin`, ricevute di lettura, metriche e `preparation_commit`. I campi omonimi annidati, le fonti con i propri metadati, l'obiettivo e `chapter_limits` rimangono intatti. La selezione aveva già un pacchetto separato. Il payload della chat ordinaria non cambia.
+
+Verifica finale: 59 test TypeScript passati, inclusi i flussi con SDK, più controllo dei tipi e build. È stata inoltre verificata in sola lettura la ricostruzione esatta di quattro pacchetti reali, reinserendo soltanto i quattro metadati locali esclusi. Nessuna richiesta al modello è stata necessaria per questa misura.
+
+| Pacchetto reale campionato | Caratteri prima | Dopo deduplicazione fonti | Dopo anche capitolo unico | Dopo tutte e tre |
+| --- | ---: | ---: | ---: | ---: |
+| Scrittura capitolo | 297.069 | 295.962 | 285.888 | 280.745 |
+| Correzione mappa | 259.435 | 254.203 | 254.203 | 249.060 |
+| Revisione didattica | 191.766 | 191.766 | 191.766 | 189.085 |
+| Valutazione di un tentativo | 23.321 | 18.942 | 18.942 | 18.942 |
+
+Sono dimensioni dei dati JSON, non token misurati dal provider né risparmi economici garantiti. Le risposte generate non sono state confrontate con chiamate aggiuntive sul materiale dell'utente; la conservazione dei dati e i flussi applicativi sono verificati dai test.

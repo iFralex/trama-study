@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {deduplicateCurrentChapter,deduplicateSourceTexts} from '../server/model-payload';
+import {preparationModelData,deduplicateCurrentChapter,deduplicateSourceTexts} from '../server/model-payload';
 
 import {expandSources} from './helpers/model-payload';
 const text='La fonte mantiene formule, convenzioni, codice e ipotesi. '.repeat(60);
@@ -34,4 +34,20 @@ test('chapters with the same ID but different data cannot be substituted',()=>{
  const original={chapter:{id:'pram',sources:['new']},plan:{data:{chapters:[{id:'pram',sources:['old']}]}}};
  assert.equal(deduplicateCurrentChapter(original),original);
  assert.equal(deduplicateCurrentChapter({kind:'review_solve'}).kind,'review_solve');
+});
+
+test('only local root checkpoint fields are withheld; semantic data and nested metadata stay intact',()=>{
+ const task={kind:'chapter',engine:2,task_id:'immutable-id',model_key:'model',budget:32000,source_revisions:{doc:'hash'},chapter_limits:{max_blocks:48,max_characters:180000},objective:{request:'Teach PRAM',budget:'Student constraint'},sources:[{id:'a',page:1,text,metadata:{source_revisions:'source metadata'}}]};
+ const original=structuredClone(task),packet=preparationModelData(task) as any;
+ for(const key of ['task_id','model_key','budget','source_revisions'])assert.equal(Object.hasOwn(packet,key),false);
+ const {task_id,model_key,budget,source_revisions,...semantic}=task;
+ assert.deepEqual(packet,semantic);assert.deepEqual(task,original);
+});
+test('all three optimizations compose without changing any semantic fields or the stored task',()=>{
+ const source={id:'a',document:'doc',text,page:1},chapter={id:'pram',sources:['a'],objective:'Teach PRAM'};
+ const task={task_id:'immutable-id',budget:32000,source_revisions:{doc:'hash'},model_key:'model',kind:'chapter',chapter,plan:{data:{chapters:[structuredClone(chapter)],gaps:['Keep caveat']}},sources:[source,{...source,quality:'Different metadata'}]};
+ const original=structuredClone(task),packet=preparationModelData(task),restored=expandSources(packet);
+ restored.plan.data.chapters[0]=structuredClone(restored.chapter);
+ assert.deepEqual({...restored,task_id:task.task_id,budget:task.budget,source_revisions:task.source_revisions,model_key:task.model_key},task);
+ assert.deepEqual(task,original);
 });
