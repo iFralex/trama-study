@@ -33,7 +33,7 @@ Le spiegazioni possono contenere Markdown, formule, pseudocodice e attività HTM
 
 Ogni consegna salva prima la risposta, poi richiede soltanto una correzione sintetica al valutatore isolato, mostrata sotto l’esercizio. Non viene generata automaticamente una seconda risposta nella chat. Salvataggio dei tentativi, indicatori di avanzamento e programmazione dei ripassi restano attivi. La spiegazione estesa parte soltanto con **Spiega la valutazione**; note interpretative e modifiche del piano non vengono richieste a ogni consegna. Se il provider fallisce, risposta e tentativo rimangono recuperabili. I giudizi generati restano provvisori e contestabili, anche se il confronto numerico con la chiave coincide. L’indice distingue affrontato, riuscito con aiuti, riuscito autonomamente e riconfermato a distanza, mantenendo il qualificatore provvisorio; la riconferma richiede problemi diversi e almeno 24 ore. Le attività HTML non possono promuovere questi indicatori di successo.
 
-**Nuova sessione di studio** mantiene piano, posizione e diario, ma separa conversazione e nuove bozze. Le sessioni precedenti rimangono recuperabili. I concetti delle attività hanno identità separate per percorso, evitando collisioni tra obiettivi diversi dello stesso corso.
+**Nuova conversazione con il tutor** mantiene piano, posizione e diario e conserva risposte e valutazioni degli stessi esercizi, nella stessa versione e nello stesso percorso. La nuova conversazione ha una chat separata; quelle precedenti rimangono recuperabili nella cronologia. Le bozze già modificate nella nuova conversazione non vengono sovrascritte. I concetti delle attività hanno identità separate per percorso, evitando collisioni tra obiettivi diversi dello stesso corso.
 
 ## Memoria e revisioni
 
