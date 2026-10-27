@@ -35,8 +35,11 @@ def shingles(text):
     words=re.findall(r'[a-zÀ-ÿ]+|\d+',text)
     return {' '.join(words[i:i+5]) for i in range(max(0,len(words)-4))}
 
-class CourseStudy:
+from .study_time import StudyTimeStudy
+
+class CourseStudy(StudyTimeStudy):
     def setup_course_study(self):
+        self.setup_study_time()
         self.db.executescript('''
           CREATE TABLE IF NOT EXISTS course_paths(id TEXT PRIMARY KEY,course TEXT,objective TEXT,status TEXT,error TEXT,created TEXT,updated TEXT);
           CREATE TABLE IF NOT EXISTS course_path_sessions(session TEXT PRIMARY KEY,path TEXT,chapter TEXT,version INTEGER,block TEXT,return_state TEXT);

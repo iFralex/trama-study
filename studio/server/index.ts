@@ -40,6 +40,10 @@ app.post('/api/import',run(async(req,res)=>{const result=await bridge.call('impo
 app.get('/api/courses/:course/inventory',run(async(req,res)=>res.json(await bridge.call('course_inventory',{course:req.params.course}))));
 app.get('/api/courses/:course/paths',run(async(req,res)=>res.json(await bridge.call('course_paths',{course:req.params.course}))));
 app.post('/api/paths',run(async(req,res)=>res.json(await bridge.call('course_create',req.body))));
+app.get('/api/paths/:path/study-time',run(async(req,res)=>res.json(await bridge.call('course_study_time',{path:req.params.path,sid:req.query.sid||undefined,chapter:req.query.chapter||undefined,version:req.query.version?Number(req.query.version):undefined}))));
+app.post('/api/paths/:path/study-time',run(async(req,res)=>res.json(await bridge.call('study_time_settings',{...req.body,path:req.params.path}))));
+app.post('/api/sessions/:sid/study-time/mark',run(async(req,res)=>res.json(await bridge.call('study_time_mark',{...req.body,sid:req.params.sid}))));
+app.post('/api/sessions/:sid/study-time/record',run(async(req,res)=>res.json(await bridge.call('study_time_record',{...req.body,sid:req.params.sid}))));
 app.get('/api/paths/:path',run(async(req,res)=>res.json(await bridge.call('course_path_view',{path:req.params.path,sid:req.query.sid||undefined}))));
 app.post('/api/paths/:path/run',run(async(req,res)=>res.json(await courseEngine.start(req.params.path))));
 app.post('/api/paths/:path/pause',run(async(req,res)=>res.json(await courseEngine.pause(req.params.path))));
