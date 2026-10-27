@@ -36,8 +36,9 @@ def shingles(text):
     return {' '.join(words[i:i+5]) for i in range(max(0,len(words)-4))}
 
 from .study_time import StudyTimeStudy
+from .study_learning import LearningContinuity
 
-class CourseStudy(StudyTimeStudy):
+class CourseStudy(StudyTimeStudy,LearningContinuity):
     def setup_course_study(self):
         self.setup_study_time()
         self.db.executescript('''
@@ -681,6 +682,7 @@ class CourseStudy(StudyTimeStudy):
         return [dict(r,card=unpack(r['card'])) for r in self.db.execute('SELECT * FROM course_recalls WHERE path=?',(path,))]
 
     def course_recall_card(self,sid,attempt_id,card=None):
+        sid=self.course_attempt_session(sid,attempt_id)
         a=self.db.execute('SELECT * FROM attempts WHERE id=? AND session=?',(attempt_id,sid)).fetchone()
         link=self._path_for_session(sid)
         if not a or not link:return None

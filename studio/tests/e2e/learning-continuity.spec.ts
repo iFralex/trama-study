@@ -1,0 +1,43 @@
+import {test,expect} from '@playwright/test';
+
+test('new tutor conversation retains the submitted answer and original assessment without model calls',async({page,request})=>{
+  test.skip(process.env.STUDIO_CONTINUITY_E2E!=='1','Requires the isolated graded continuity fixture');
+  await page.addInitScript(()=>{localStorage.setItem('studio-last-view','corso');localStorage.setItem('studio-math-reading','text');});
+  await page.route('**/*',async route=>route.fulfill({response:await route.fetch()}));
+  await page.route('**/api/math-speech',route=>route.fulfill({json:{speech:'Formula del capitolo'}}));
+  let modelCalls=0;
+  for(const endpoint of ['chat','assess'])await page.route('**/api/sessions/*/'+endpoint,async route=>{modelCalls++;await route.abort();});
+  const paths=await (await request.get('/api/courses/curriculum-fixture-2026/paths')).json(),path=paths[0];
+  const before=await (await request.post('/api/paths/'+path.id+'/open',{data:{}})).json();
+  const attempt=before.attempts[0];expect(attempt.answer).toBe('3');
+  await page.goto('/');await page.getByRole('combobox',{name:'IL TUO CORSO'}).selectOption('curriculum-fixture-2026');
+  const card=page.locator('.activity-card');await expect(card.getByLabel('La tua risposta',{exact:true})).toHaveValue('3');
+  await expect(card.getByLabel('Riscontro sulla risposta')).toContainText('Giudizio originale: tre livelli corretti.');
+  await page.getByRole('button',{name:'Tutor',exact:true}).click();
+  await page.getByText('Gestisci la conversazione',{exact:true}).click();
+  await page.getByRole('button',{name:'Nuova conversazione con il tutor',exact:true}).click();
+  await expect(card.getByLabel('La tua risposta',{exact:true})).toHaveValue('3');
+  await expect(card.getByLabel('Riscontro sulla risposta')).toContainText('Risposta e valutazione conservate');
+  const afterPath=await (await request.get('/api/paths/'+path.id)).json();
+  expect(afterPath.sid).not.toBe(before.session.id);
+  const after=await (await request.get('/api/sessions/'+afterPath.sid)).json();
+  expect(after.messages).toEqual([]);expect(after.attempts.map((a:any)=>a.id)).toEqual([attempt.id]);
+  expect(after.attempts[0].grade).toEqual(attempt.grade);
+  await page.reload();
+  await expect(page.locator('.activity-card').getByLabel('La tua risposta',{exact:true})).toHaveValue('3');
+  await expect(page.locator('.activity-card').getByLabel('Riscontro sulla risposta')).toContainText('Giudizio originale: tre livelli corretti.');
+  await page.locator('.activity-card').getByText('Risposta di questo tentativo',{exact:true}).click();
+  await expect(page.locator('.activity-card details').filter({has:page.getByText('Risposta di questo tentativo',{exact:true})})).toContainText('3');
+  // Change conversation inside the draft debounce window: flush before opening it.
+  await page.getByRole('button',{name:'Tutor',exact:true}).click();
+  await page.getByText('Gestisci la conversazione',{exact:true}).click();
+  await page.locator('.activity-card').getByLabel('La tua risposta',{exact:true}).fill('4');
+  await page.getByRole('button',{name:'Nuova conversazione con il tutor',exact:true}).click();
+  await expect(page.locator('.activity-card').getByLabel('La tua risposta',{exact:true})).toHaveValue('4');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const finalPath=await (await request.get('/api/paths/'+path.id)).json();
+  const final=await (await request.get('/api/sessions/'+finalPath.sid)).json();
+  expect(final.attempts).toHaveLength(1);expect(final.attempts[0].answer).toBe('3');
+  expect(final.activities[0].state.answer).toBe('4');
+  expect(modelCalls).toBe(0);
+});

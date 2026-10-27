@@ -212,7 +212,7 @@ class CourseTest(unittest.TestCase):
         fresh=self.store.course_open(self.path,fresh=True)
         self.assertNotEqual(fresh['session']['id'],self.sid)
         self.assertEqual(fresh['curriculum']['block'],'practice')
-        self.assertFalse(fresh['activities'][0]['state'])
+        self.assertEqual(fresh['activities'][0]['state']['answer'],'Vecchia bozza')
         self.assertTrue(self.store.course_context(fresh['session']['id'])['preferences'])
         restored=self.store.course_open(self.path,sid=self.sid)
         self.assertEqual(restored['activities'][0]['state']['answer'],'Vecchia bozza')

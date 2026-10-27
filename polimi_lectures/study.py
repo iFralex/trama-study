@@ -474,13 +474,15 @@ class _StudyBase(BeginnerStudy, CourseStudy):
             activities.append({'id':r['id'],'version':r['version'],'spec':public,'state':json.loads(r['state']),'created':r['created']})
         messages=[dict(r) for r in self.db.execute('SELECT * FROM messages WHERE session=? ORDER BY rowid',(sid,))]
         attempts=[dict(r,answer=json.loads(r['answer']),grade=json.loads(r['grade'])) for r in self.db.execute('SELECT * FROM attempts WHERE session=? ORDER BY rowid',(sid,))]
-        return {'curriculum':self.course_context_public(sid),'learning':self.beginner_context(sid),'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])}
+        return self.course_learning_view(sid,{'curriculum':self.course_context_public(sid),'learning':self.beginner_context(sid),'session':session,'activities':activities,'messages':messages,'attempts':attempts,'progress':self.progress(session['course']),'recommendation':self.recommendation(session['course'])})
 
     def activity(self,sid,aid,version):
         row=self.db.execute('SELECT * FROM activities WHERE id=? AND version=? AND session=?',(aid,int(version),sid)).fetchone()
         if not row:
             raise ValueError('Attività non trovata.')
-        return dict(row,spec=json.loads(row['spec']),state=json.loads(row['state']))
+        activity=dict(row,spec=json.loads(row['spec']),state=json.loads(row['state']))
+        activity['state']=self._course_inherited_state(sid,activity)
+        return activity
 
     def event(self,sid,aid,version,event_id,kind,payload):
         if kind not in ('change','try','submit','hint','explain','solution','reset'):
@@ -506,11 +508,13 @@ class _StudyBase(BeginnerStudy, CourseStudy):
             if kind in ('hint','explain','solution'):
                 spec=activity['spec']
                 hints=spec.get('hints',['Rileggi le ipotesi e separa letture, scritture e operazioni.'])
-                count=self.db.execute("SELECT count(*) FROM events WHERE session=? AND activity=? AND kind='hint'",(sid,aid)).fetchone()[0]
+                count=self.course_learning_aids(sid,activity,hint_only=True)
                 text=(hints[min(count-1,len(hints)-1)] if kind=='hint' else spec.get('solution','Chiedi al tutor una spiegazione usando le fonti collegate.'))
                 response['feedback']=text
             if kind=='submit':
-                aids=self.db.execute("SELECT count(*) FROM events WHERE session=? AND activity=? AND kind IN ('hint','explain','solution')",(sid,aid)).fetchone()[0]
+                if 'answer' in payload:
+                    self.db.execute('UPDATE activities SET state=? WHERE id=? AND version=?',(encoded(dict(activity['state'],answer=payload['answer'])),aid,version))
+                aids=self.course_learning_aids(sid,activity)
                 grade=self.grade(activity['spec'],payload.get('answer'))
                 attempt_id=uid()
                 self.db.execute('INSERT INTO attempts VALUES(?,?,?,?,?,?,?,?,?,?,?)',(attempt_id,event_id,sid,aid,version,activity['spec'].get('concept','general'),encoded(payload.get('answer')),encoded(grade),aids,now(),None))
@@ -537,6 +541,7 @@ class _StudyBase(BeginnerStudy, CourseStudy):
                 'rubric':spec.get('rubric','Correttezza, ipotesi esplicite, ragionamento e casi limite.')}
 
     def assess(self,sid,attempt_id,grade):
+        sid=self.course_attempt_session(sid,attempt_id)
         row=self.db.execute('SELECT * FROM attempts WHERE id=? AND session=?',(attempt_id,sid)).fetchone()
         if not row:
             raise ValueError('Tentativo non trovato.')
@@ -549,6 +554,7 @@ class _StudyBase(BeginnerStudy, CourseStudy):
         return grade
 
     def assessment(self,sid,attempt_id):
+        sid=self.course_attempt_session(sid,attempt_id)
         attempt=self.db.execute('SELECT * FROM attempts WHERE id=? AND session=?',(attempt_id,sid)).fetchone()
         if not attempt:
             raise ValueError('Consegna una risposta prima della correzione.')
@@ -563,6 +569,7 @@ class _StudyBase(BeginnerStudy, CourseStudy):
         return {'attempt':dict(attempt,answer=json.loads(attempt['answer']),grade=json.loads(attempt['grade'])),'activity':activity,'sources':sources}
 
     def correct(self,sid,attempt_id,text):
+        sid=self.course_attempt_session(sid,attempt_id)
         if not str(text).strip():
             raise ValueError('Descrivi la correzione.')
         with self.db:
