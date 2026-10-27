@@ -19,6 +19,16 @@ test('completed replacements survive interruption and untouched blocks stay iden
  assert.equal(prompts.length,1);assert.equal(answer(prompts[0]).blocks[0].id,'third');
  assert.deepEqual(result.blocks[0],task.draft.blocks[0]);assert.deepEqual(result.blocks[3],task.draft.blocks[3]);assert.equal(result.blocks[1].text,'Formula corrected');
 });
+test('resumed repair supplies complete source texts and retries only pending replacements',async()=>{
+ const saved={version:1,targets:['second','third'],blocks:[{...task.draft.blocks[1],text:'Validated correction'}],pending_blocks:[{...task.draft.blocks[2],text:'Correction awaiting source verification'}]};
+ const prompts:string[]=[],loaded:string[][]=[];
+ const result=await repairChapterBlocks(task,saved,async prompt=>{prompts.push(prompt);return answer(prompt);},async()=>{},()=>false,async refs=>{loaded.push(refs);return refs.map(id=>({id,text:'Full source '+id}));});
+ assert.deepEqual(loaded,[['a']]);assert.equal(prompts.length,1);
+ const data=JSON.parse(prompts[0].split('Dati della correzione:\n')[1]);
+ assert.equal(data.block.text,saved.pending_blocks[0].text);assert.deepEqual(data.originals,[{id:'a',text:'Full source a'}]);
+ assert.deepEqual(result.blocks[1],saved.blocks[0]);assert.equal(result.blocks[2].text,'Correction awaiting source verification corrected');
+ assert.equal(data.context_blocks.find((b:any)=>b.id==='second').text,'Validated correction');
+});
 test('repair rejects changed IDs and incomplete activities with one bounded retry',async()=>{
  let calls=0,saves=0;
  await assert.rejects(repairChapterBlocks(task,null,async()=>{calls++;return {blocks:[task.draft.blocks[0]]};},async()=>{saves++;},()=>false),/stesso id/);
@@ -39,6 +49,8 @@ test('engine saves block checkpoints and submits the complete chapter to normal 
   if(method==='course_peek_task')return complete?{kind:'done'}:task;
   if(method==='course_task')return task;
   if(method==='preparation_begin')return {metrics:{}};
+  if(method==='source')return {id:args.source_id,text:'Original '+args.source_id};
+  if(method==='preparation_read')return {};
   if(method==='preparation_usage'){if(args.metrics.repair_checkpoint)saved.push(args.metrics.repair_checkpoint);return {};}
   if(method==='preparation_commit'){committed=args.result;complete=true;return {};}
   if(['preparation_metric','preparation_model_call'].includes(method))return {};

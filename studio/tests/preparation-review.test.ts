@@ -7,6 +7,15 @@ import type {Tutor} from '../server/tutor';
 
 const task={kind:'review_discipline',chapter:{id:'chapter'},draft_revision:2,originals:[{id:'supplied',text:'Original text'}],draft:{blocks:[{id:'intro',kind:'text',text:'Already reviewed text.',sources:['supplied']},{id:'exercise',kind:'activity',spec:{sources:['tool-read'],prompt:'Exercise'}},{id:'extra',kind:'text',text:'A claim with an additional citation.',sources:['supplied']}]}};
 
+test('review checklist and targeted repair include external references without treating them as supplied originals',()=>{
+  const external='https://example.edu/reference',extended=structuredClone(task);
+  Object.assign(extended.draft.blocks[0],{external_sources:[external]});
+  assert.ok(reviewChecklist(extended)!.required_sources.includes(external));
+  assert.ok(reviewChecklist(extended)!.sources_to_retrieve.includes(external));
+  const data=JSON.parse(reviewRepairPrompt(extended,{checked_sources:['supplied','tool-read'],issues:[]},'Missing web reference',['supplied','tool-read']).split('Dati della riparazione:\n')[1]);
+  assert.deepEqual(data.attention_sources,[external]);assert.deepEqual(data.blocks_to_recheck.map((b:any)=>b.id),['intro']);
+});
+
 test('review checklist distinguishes all required references from originals already provided',()=>{
   assert.deepEqual(reviewChecklist(task),{required_blocks:['intro','exercise','extra'],required_sources:['supplied','tool-read'],sources_in_input:['supplied'],sources_to_retrieve:['tool-read']});
   assert.equal(reviewChecklist({kind:'chapter'}),null);
@@ -28,14 +37,14 @@ test('repair of an incomplete bibliography retains sources from the original inp
   assert.deepEqual(data.checklist.sources_in_input,['supplied']);
 });
 
-async function resumeReview(valid=false,reject=false){
+async function resumeReview(valid=false,reject=false,kind='review_discipline'){
   const previous={summary:'Prior review',checked_blocks:['intro','exercise','extra'],checked_sources:['supplied','tool-read','unread'],issues:[{block:'extra',severity:'warning',message:'Verify the additional reference.',sources:['unread']}]};
   let complete=false,asks=0;const prompts:string[]=[],states:string[]=[];
   const bridge={async call(method:string,args:any={}){
     if(method==='course_path_view')return {sid:'session',status:'error'};
     if(method==='course_status'){states.push(args.status);return {};}
-    if(method==='course_peek_task')return complete?{kind:'done'}:task;
-    if(method==='course_task')return {...task,task_id:'task'};
+    if(method==='course_peek_task')return complete?{kind:'done'}:{...task,kind};
+    if(method==='course_task')return {...task,kind,task_id:'task'};
     if(method==='preparation_begin')return {metrics:{},review_recovery:{result:previous,error:valid?'':'Citazione non letta: unread',read_sources:['supplied','tool-read']}};
     if(method==='preparation_commit'){if(reject)throw Error('La revisione deve verificare le fonti dei blocchi.');complete=true;return {};}
     if(['preparation_metric','preparation_model_call','preparation_usage','preparation_reject'].includes(method))return {};
@@ -56,6 +65,10 @@ test('resuming a rejected review asks only for targeted repair and does not repe
 
 test('an already valid recovered review commits without another model request',async()=>{
   const result=await resumeReview(true);assert.equal(result.asks,0);assert.deepEqual(result.states,['running','ready']);
+});
+
+test('recovered independent solutions also commit without another model request',async()=>{
+  const result=await resumeReview(true,false,'review_solve');assert.equal(result.asks,0);assert.deepEqual(result.states,['running','ready']);
 });
 
 test('a failed resumed repair stops after one request without bypassing validation',async()=>{

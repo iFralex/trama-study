@@ -120,7 +120,9 @@ export class Tutor {
     if(role==='review_explanation')customTools=customTools.filter(t=>['search_sources','read_source','inspect_source_visual','list_materials','read_material','grep_materials','web_search','read_web_page'].includes(t.name));
     if(role==='selection'||role==='map_contribution')customTools=[];
     if(role==='scope')customTools=customTools.filter(t=>['list_materials','read_scope_material','grep_materials'].includes(t.name));
-    return (await createAgentSession({cwd:sessionDir,agentDir,modelRuntime:this.runtime,model:taskId?{...model,maxTokens:Math.min(8192,model.maxTokens)}:model,resourceLoader:loader,settingsManager:SettingsManager.inMemory({}),sessionManager:assessor||role!=='tutor'?SessionManager.inMemory():SessionManager.continueRecent(sessionDir,sessionDir),tools:customTools.map(t=>t.name),customTools,thinkingLevel:'medium'})).session;
+    const {session}=await createAgentSession({cwd:sessionDir,agentDir,modelRuntime:this.runtime,model:taskId?{...model,maxTokens:Math.min(8192,model.maxTokens)}:model,resourceLoader:loader,settingsManager:SettingsManager.inMemory({}),sessionManager:assessor||role!=='tutor'?SessionManager.inMemory():SessionManager.continueRecent(sessionDir,sessionDir),tools:customTools.map(t=>t.name),customTools,thinkingLevel:'medium'});
+    session.subscribe(event=>{if(event.type==='agent_start')calls=0;});
+    return session;
   }
   async chat(sid:string,text:string,onDelta:(text:string)=>void,automatic=false,attemptId?:string){
     if(this.busySessions.has(sid))throw Error('Una risposta è già in corso.');

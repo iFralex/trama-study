@@ -9,6 +9,7 @@ import subprocess
 import unicodedata
 from collections import Counter
 from .study_map import MapStudy,STRATEGY
+from .study_chapter import ChapterPreparation
 from .study_course import pack, unpack, stamp, ident, is_exam, exam_type, exam_family, shingles, CHAPTER_LIMITS
 
 VERSION='selective-2.3'
@@ -41,7 +42,7 @@ def exam_contains(text,original):
     needle=exam_tokens(text);haystack=exam_tokens(original)
     return bool(needle) and any(haystack[i:i+len(needle)]==needle for i in range(len(haystack)-len(needle)+1))
 
-class PreparationStudy(MapStudy):
+class PreparationStudy(ChapterPreparation,MapStudy):
     def setup_preparation(self):
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS prep_runs(path TEXT PRIMARY KEY,version TEXT,phase TEXT,current TEXT,last_checkpoint TEXT,error TEXT,created TEXT,updated TEXT);
@@ -486,34 +487,69 @@ class PreparationStudy(MapStudy):
             elif isinstance(source,list):
                 for v in source:register(v)
         register(task)
-        return {'started':True,'metrics':unpack(row['metrics'],{}),'review_recovery':self._review_recovery(path,task)}
+        metrics=unpack(row['metrics'],{});chapter_recovery=self._chapter_recovery(path,task)
+        repair_recovery=self._repair_recovery(path,task,metrics)
+        if repair_recovery:
+            metrics['repair_checkpoint']=repair_recovery
+            with self.db:self.db.execute('UPDATE prep_tasks SET metrics=? WHERE id=?',(pack(metrics),task['task_id']))
+        if chapter_recovery and not chapter_recovery['error']:
+            metrics['chapter_checkpoint']={k:chapter_recovery[k] for k in ('version','outline','blocks')}
+            with self.db:self.db.execute('UPDATE prep_tasks SET metrics=? WHERE id=?',(pack(metrics),task['task_id']))
+        return {'started':True,'metrics':metrics,'review_recovery':self._review_recovery(path,task),'chapter_recovery':chapter_recovery}
 
     def _review_recovery(self,path,task):
         """Reuse a rejected review of this exact immutable task, never an unchecked approval."""
+        if task['kind']=='review_solve':
+            for row in self.db.execute('SELECT output FROM prep_rejections WHERE path=? AND task=? ORDER BY rowid DESC LIMIT 6',(path,task['task_id'])):
+                try:
+                    result=json.loads(re.sub(r'^```(?:json)?\s*|\s*```$','',row['output'].strip()))
+                    self._solve_result(task,result)
+                    return {'result':result,'error':'','read_sources':self._review_read_sources(task['task_id'])}
+                except (ValueError,TypeError,KeyError):continue
+            return None
         if task['kind'] not in ('review_discipline','review_didactic'):return None
         draft=task['draft'];blocks={b['id'] for b in draft['blocks']}
-        refs={ref for b in draft['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))}
-        best=None;score=(-1,-1)
+        refs=self._review_required_sources(draft)
+        best=None;score=(-1,-1,-1)
         for row in self.db.execute('SELECT output,error FROM prep_rejections WHERE path=? AND task=? ORDER BY rowid DESC LIMIT 6',(path,task['task_id'])):
-            if not row['error'].startswith(('La revisione deve','Citazione non letta')):continue
             try:
                 result=json.loads(re.sub(r'^```(?:json)?\s*|\s*```$','',row['output'].strip()))
                 if not isinstance(result,dict) or not result.get('summary') or not isinstance(result.get('issues'),list):continue
                 checked=result.get('checked_sources',[]);checked_blocks=result.get('checked_blocks',[])
                 if not isinstance(checked,list) or not isinstance(checked_blocks,list) or any(not isinstance(s,str) for s in checked+checked_blocks):continue
-                candidate=(int(set(checked_blocks)==blocks),len(refs&set(checked)))
-                if candidate<=score:continue
                 try:self._review_result(path,task,result,draft);error=''
                 except ValueError as invalid:error=str(invalid)
+                candidate=(int(not error),int(set(checked_blocks)==blocks),len(refs&set(checked)))
+                if candidate<=score:continue
                 best={'result':result,'error':error};score=candidate
             except (ValueError,TypeError,KeyError):continue
-        if best is not None:best['read_sources']=[r[0] for r in self.db.execute('SELECT DISTINCT source FROM prep_reads WHERE task=? ORDER BY source',(task['task_id'],))]
+        if best is not None:best['read_sources']=self._review_read_sources(task['task_id'])
         return best
 
     def preparation_review_recovery(self,path,task):
         row=self.db.execute('SELECT input FROM prep_tasks WHERE path=? AND id=?',(path,task)).fetchone()
         if not row:raise ValueError('Compito non trovato nel percorso.')
-        return self._review_recovery(path,unpack(row['input'])) or {'read_sources':[r[0] for r in self.db.execute('SELECT DISTINCT source FROM prep_reads WHERE task=? ORDER BY source',(task,))]}
+        return self._review_recovery(path,unpack(row['input'])) or {'read_sources':self._review_read_sources(task)}
+
+    def _review_read_sources(self,task):
+        return [r[0] for r in self.db.execute('SELECT source FROM prep_reads WHERE task=? UNION SELECT url FROM prep_external WHERE task=? ORDER BY 1',(task,task))]
+
+    @staticmethod
+    def _review_required_sources(draft):
+        refs=set()
+        for block in draft['blocks']:
+            owner=block if block['kind']=='text' else block.get('spec',{})
+            refs.update(owner.get('sources',[]));refs.update(owner.get('external_sources',[]))
+        return refs
+
+    def _review_refs(self,path,task,refs):
+        if not isinstance(refs,list) or not refs or any(not isinstance(ref,str) or not ref.strip() for ref in refs):
+            raise ValueError('La revisione richiede riferimenti testuali non vuoti.')
+        for ref in set(refs):
+            if ref.startswith('https://'):
+                if not self.db.execute('SELECT 1 FROM prep_external WHERE task=? AND url=?',(task['task_id'],ref)).fetchone():
+                    raise ValueError('Fonte web della revisione non letta nel compito: '+ref+'. Usa read_web_page prima di citarla.')
+            else:self._prep_refs(path,task,[ref])
 
     def preparation_read(self,task,result,method='tool'):
         row=self.db.execute('SELECT path,state FROM prep_tasks WHERE id=?',(task,)).fetchone()
@@ -669,7 +705,10 @@ class PreparationStudy(MapStudy):
                     self.db.execute('INSERT INTO course_plans VALUES(?,?,?,?,?)',(path,task['plan']['version']+1,pack(data),'Mappa da correggere dopo revisione',stamp()))
         elif kind in ('chapter','repair_chapter'):
             chapter=task['chapter']['id']
-            for block in result.get('blocks',[]):self._prep_refs(path,task,block.get('sources',block.get('spec',{}).get('sources',[])))
+            result=dict(result,blocks=self._chapter_blocks_normalized(task,result.get('blocks',[]))) if kind=='chapter' else result
+            for block in result.get('blocks',[]):
+                if kind=='repair_chapter':self._repair_block_validate(path,task,block)
+                else:self._prep_refs(path,task,block.get('sources',block.get('spec',{}).get('sources',[])))
             self._validate_chapter_content(path,chapter,result)
             self._deterministic_checks(result)
             previous=self.db.execute('SELECT max(revision) FROM prep_drafts WHERE path=? AND chapter=?',(path,chapter)).fetchone()[0] or 0
@@ -679,9 +718,7 @@ class PreparationStudy(MapStudy):
         elif kind.startswith('review_'):
             chapter=task['chapter']['id'];revision=task['draft_revision']
             if kind=='review_solve':
-                activities=[b['id'] for b in task['draft']['blocks'] if b['kind']=='activity']
-                if {a.get('block') for a in result.get('solutions',[])}!=set(activities):raise ValueError('Risolvi ogni esercizio prima di consultare le soluzioni.')
-                if any('answer' not in a or not a.get('reasoning') for a in result.get('solutions',[])):raise ValueError('Ogni soluzione indipendente richiede risposta e ragionamento.')
+                result=self._solve_result(task,result)
                 column='solve'
             else:
                 self._review_result(path,task,result,task['draft']);column='discipline' if kind=='review_discipline' else 'didactic'
@@ -694,21 +731,43 @@ class PreparationStudy(MapStudy):
             self.db.execute('UPDATE prep_runs SET last_checkpoint=?,current=NULL,error=NULL,updated=? WHERE path=?',(stamp(),stamp(),path))
         return self.course_path_view(path)
 
+    def _solve_result(self,task,result):
+        solutions=result.get('solutions') if isinstance(result,dict) else None
+        if not isinstance(solutions,list) or any(not isinstance(a,dict) or not isinstance(a.get('block'),str) for a in solutions):
+            raise ValueError('Le soluzioni indipendenti richiedono un elenco di oggetti con block testuale.')
+        blocks={b['id']:b['kind'] for b in task['draft']['blocks']}
+        ids=[a['block'] for a in solutions];required={id for id,kind in blocks.items() if kind=='activity'}
+        if len(ids)!=len(set(ids)):raise ValueError('Soluzioni indipendenti duplicate per lo stesso blocco.')
+        unknown=set(ids)-blocks.keys()
+        if unknown:raise ValueError('Soluzioni riferite a blocchi inesistenti: '+pack(sorted(unknown))+'.')
+        missing=required-set(ids)
+        if missing:raise ValueError('Risolvi ogni esercizio prima di consultare le soluzioni. Attività mancanti: '+pack(sorted(missing))+'.')
+        if any('answer' not in a or not isinstance(a.get('reasoning'),str) or not a['reasoning'].strip() for a in solutions):
+            raise ValueError('Ogni soluzione indipendente richiede risposta e ragionamento.')
+        supplementary=result.get('supplementary_solutions',[])
+        if not isinstance(supplementary,list) or any(not isinstance(a,dict) or not isinstance(a.get('block'),str) or blocks.get(a['block'])!='text' or 'answer' not in a or not isinstance(a.get('reasoning'),str) or not a['reasoning'].strip() for a in supplementary):
+            raise ValueError('Contributi aggiuntivi non validi: possono riferirsi soltanto a blocchi di testo esistenti.')
+        extras=[a for a in solutions if blocks[a['block']]=='text']+supplementary
+        if len({a['block'] for a in extras})!=len(extras):raise ValueError('Contributi aggiuntivi duplicati.')
+        normalized=dict(result,solutions=[a for a in solutions if a['block'] in required])
+        if extras:normalized['supplementary_solutions']=extras
+        return normalized
+
     def _review_result(self,path,task,result,draft):
         if not isinstance(result.get('issues'),list) or not result.get('summary'):raise ValueError('Revisione senza esito e rilievi.')
         if draft:
             expected={b['id'] for b in draft['blocks']}
-            refs={ref for b in draft['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))}
+            refs=self._review_required_sources(draft)
             if set(result.get('checked_blocks',[]))!=expected:raise ValueError('La revisione deve coprire tutti i blocchi del capitolo. Blocchi mancanti: '+pack(sorted(expected-set(result.get('checked_blocks',[]))))+'.')
             missing=refs-set(result.get('checked_sources',[]))
             if missing:raise ValueError('La revisione deve verificare le fonti dei blocchi. Fonti mancanti in checked_sources: '+pack(sorted(missing))+'. Includi anche gli originali già forniti nel compito, dopo averli confrontati; non limitarti alle letture aggiuntive via strumenti.')
-            for ref in set(result.get('checked_sources',[])):self._prep_refs(path,task,[ref])
+            self._review_refs(path,task,result.get('checked_sources',[]))
         elif task['kind']=='map_review':
             if set(result.get('checked_objectives',[]))!=set(range(len(self._path(path)['objective']['included']))):raise ValueError('La revisione deve coprire tutti gli obiettivi.')
         blocks={b['id'] for b in draft['blocks']} if draft else None
         for issue in result['issues']:
             if issue.get('severity') not in ('blocking','warning') or not issue.get('message') or (blocks is not None and issue.get('block') not in blocks):raise ValueError('Rilievo senza gravità, spiegazione o blocco valido.')
-            self._prep_refs(path,task,issue.get('sources'))
+            self._review_refs(path,task,issue.get('sources'))
 
     def _publish_reviewed(self,path,task):
         row=self.db.execute('SELECT * FROM prep_drafts WHERE path=? AND chapter=? AND revision=?',(path,task['chapter']['id'],task['draft_revision'])).fetchone()
@@ -747,6 +806,8 @@ class PreparationStudy(MapStudy):
                 value=[];total=0
                 for x in values:total+=x;value.append(total)
             elif model in ('amdahl','gustafson'):
+                if 'processors' not in data or 'fraction' not in data:
+                    raise ValueError('Verifica '+model+': input richiede processors e fraction (quota parallela per amdahl, quota seriale per gustafson).')
                 processors=int(data['processors']);fraction=float(data['fraction'])
                 if processors<1 or not 0<=fraction<=1:raise ValueError('Ipotesi dello scaling non valide.')
                 value=1/((1-fraction)+fraction/processors) if model=='amdahl' else processors-fraction*(processors-1)
@@ -808,6 +869,9 @@ class PreparationStudy(MapStudy):
         details=dict(current) if current else None
         if details:
             metrics=unpack(details.get('metrics'),{});details['routing']=metrics.get('routing')
+            chapter=metrics.get('chapter_checkpoint',{})
+            if details['kind']=='chapter' and chapter.get('version')==1:
+                details['chapter_progress']={'done':len(chapter.get('blocks',[])),'total':len(chapter.get('outline',[]))}
             repair=metrics.get('repair_checkpoint',{})
             if details['kind']=='repair_chapter' and repair.get('version')==1:
                 details['repair_progress']={'done':len(repair.get('blocks',[])),'total':len(repair.get('targets',[]))}

@@ -57,6 +57,98 @@ class PreparationTest(unittest.TestCase):
         task=self.task();self.store.preparation_begin(self.path,task)
         return task
 
+    def test_independent_solutions_keep_text_supplements_without_losing_required_exercises(self):
+        chapter=self.to_chapter();self.commit(chapter,self.content());task=self.task()
+        result={'solutions':[{'block':'exercise','answer':3,'reasoning':'Tre livelli'},{'block':'intro','answer':'PRAM','reasoning':'Un chiarimento del riepilogo'}]}
+        self.store.preparation_begin(self.path,task)
+        self.store.preparation_reject(self.path,task['task_id'],'Risolvi ogni esercizio prima di consultare le soluzioni.',pack(result))
+        recovered=self.store.preparation_begin(self.path,task)['review_recovery']
+        self.assertEqual(recovered['result'],result);self.assertEqual(recovered['error'],'')
+        self.store.preparation_commit(self.path,task,recovered['result'])
+        saved=json.loads(self.store.db.execute('SELECT solve FROM prep_drafts WHERE path=? AND chapter=?',(self.path,'pram')).fetchone()[0])
+        self.assertEqual(saved['solutions'],result['solutions'][:1]);self.assertEqual(saved['supplementary_solutions'],result['solutions'][1:])
+        audit=json.loads(self.store.db.execute('SELECT result FROM prep_tasks WHERE id=?',(task['task_id'],)).fetchone()[0])
+        self.assertEqual(audit,result)
+
+    def test_independent_solution_validation_still_rejects_missing_unknown_duplicate_or_incomplete_answers(self):
+        task={'draft':{'blocks':[{'id':'intro','kind':'text'},{'id':'exercise','kind':'activity'}]}}
+        valid={'block':'exercise','answer':3,'reasoning':'Tre livelli'}
+        for solutions,message in [
+            ([dict(valid,block='intro')],'Attività mancanti'),
+            ([valid,dict(valid,block='invented')],'inesistenti'),
+            ([valid,valid],'duplicate'),
+            ([dict(valid,reasoning=' ')],'ragionamento'),
+        ]:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError,message):self.store._solve_result(task,{'solutions':solutions})
+
+    def test_review_accepts_web_references_only_with_same_task_read_receipt(self):
+        task=self.review_task();result=self.review(task);url='https://example.edu/reference'
+        result['checked_sources'].append(url)
+        result['issues']=[{'block':'intro','severity':'warning','message':'Confronto con la fonte esterna','sources':[url]}]
+        with self.assertRaisesRegex(ValueError,'web della revisione non letta'):self.store._review_result(self.path,task,result,task['draft'])
+        # A receipt for a different task cannot satisfy this review.
+        with self.store.db:self.store.db.execute('INSERT INTO prep_external VALUES(?,?,?,?)',('other-task',url,'fingerprint','Original web text'))
+        with self.assertRaisesRegex(ValueError,'web della revisione non letta'):self.store._review_result(self.path,task,result,task['draft'])
+        self.store.preparation_read(task['task_id'],{'url':url,'text':'Original web text'},'read_web_page')
+        self.store.preparation_commit(self.path,task,result)
+        saved=json.loads(self.store.db.execute('SELECT discipline FROM prep_drafts WHERE path=? AND chapter=?',(self.path,'pram')).fetchone()[0])
+        self.assertEqual(saved,result)
+
+    def test_recovery_revalidates_prior_web_rejection_and_preserves_all_issues(self):
+        task=self.review_task();result=self.review(task);url='https://example.edu/reference'
+        result['checked_sources'].append(url)
+        result['issues']=[{'block':'intro','severity':'blocking','message':'Rilievo da conservare','sources':[url]}]
+        self.store.preparation_read(task['task_id'],{'url':url,'text':'Original web text'},'read_web_page')
+        self.store.preparation_reject(self.path,task['task_id'],'sources[0] ('+url+'): Fonte non disponibile durante questa attività.',pack(result))
+        recovery=self.store._review_recovery(self.path,task)
+        self.assertEqual(recovery['error'],'');self.assertEqual(recovery['result'],result)
+        self.assertIn(url,recovery['read_sources'])
+        # Recovery still enforces provenance rather than trusting the saved output.
+        with self.store.db:self.store.db.execute('DELETE FROM prep_external WHERE task=?',(task['task_id'],))
+        self.assertIn('web della revisione non letta',self.store._review_recovery(self.path,task)['error'])
+
+    def test_review_must_also_check_external_sources_used_by_chapter(self):
+        task=self.review_task();url='https://example.edu/reference';task=copy.deepcopy(task)
+        task['draft']['blocks'][0]['external_sources']=[url];result=self.review(task)
+        with self.assertRaisesRegex(ValueError,'Fonti mancanti in checked_sources'):self.store._review_result(self.path,task,result,task['draft'])
+        result['checked_sources'].append(url)
+        self.store.preparation_read(task['task_id'],{'url':url,'text':'Original web text'},'read_web_page')
+        self.store._review_result(self.path,task,result,task['draft'])
+
+    def repair_task(self):
+        task=self.review_task();self.store.preparation_commit(self.path,task,self.review(task,blocking=True))
+        task=self.task();result=self.review(task)
+        result['issues']=[{'block':'exercise','severity':'warning','message':'Chiarire il numero di livelli','sources':self.content()['blocks'][0]['sources']}]
+        self.commit(task,result);task=self.task();self.assertEqual(task['kind'],'repair_chapter')
+        self.store.preparation_begin(self.path,task);return task
+
+    def test_rejected_repair_recovers_valid_blocks_and_keeps_unread_ones_pending(self):
+        task=self.repair_task();content=copy.deepcopy(task['draft'])
+        content['blocks'][0]['text']+=' Definizione chiarita.'
+        content['blocks'][1]['spec']['prompt']+=' Spiega il ragionamento.'
+        known=set(content['blocks'][1]['spec']['sources'])
+        ref=next(r[0] for r in self.store.db.execute('SELECT id FROM passages WHERE course=? AND reserved=0 AND solution=0',(self.course,)) if r[0] not in known)
+        content['blocks'][1]['spec']['sources'].append(ref)
+        with self.store.db:self.store.db.execute('DELETE FROM prep_reads WHERE task=? AND source=?',(task['task_id'],ref))
+        with self.assertRaisesRegex(ValueError,'Citazione non letta'):self.store.preparation_commit(self.path,task,content)
+        self.store.preparation_reject(self.path,task['task_id'],'Citazione non letta',pack(content))
+        checkpoint=self.store.preparation_begin(self.path,task)['metrics']['repair_checkpoint']
+        self.assertEqual(checkpoint['blocks'],[content['blocks'][0]])
+        self.assertEqual(checkpoint['pending_blocks'],[content['blocks'][1]])
+        self.assertFalse(self.store.db.execute('SELECT 1 FROM prep_reads WHERE task=? AND source=?',(task['task_id'],ref)).fetchone())
+        self.store.preparation_read(task['task_id'],self.store.source(ref),'input')
+        self.store.preparation_commit(self.path,task,content)
+        self.assertEqual(self.task()['kind'],'review_solve')
+
+    def test_unchanged_blocks_retain_previous_validation_but_changed_blocks_need_receipts(self):
+        task=self.repair_task();content=copy.deepcopy(task['draft']);content['blocks'][0]['text']+=' Nuova spiegazione.'
+        ref=content['blocks'][0]['sources'][0]
+        with self.store.db:self.store.db.execute('DELETE FROM prep_reads WHERE task=? AND source=?',(task['task_id'],ref))
+        # The unchanged exercise is not a new source claim; edited prose still requires its source.
+        self.store._repair_block_validate(self.path,task,content['blocks'][1])
+        with self.assertRaisesRegex(ValueError,'Citazione non letta'):self.store._repair_block_validate(self.path,task,content['blocks'][0])
+
     def test_review_error_names_missing_sources_and_counts_originals_supplied_in_input(self):
         task=self.review_task();result=self.review(task);ref=result['checked_sources'][0]
         result['checked_sources']=[]
