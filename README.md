@@ -1,6 +1,8 @@
-# Polimi Lectures
+# Trama
 
-Archivio locale incrementale di registrazioni Polimi/Webex, predisposto per più corsi.
+Trama collega i materiali dei tuoi corsi a spiegazioni, esercizi, riscontri e percorsi di studio personali. Il tutor lavora sulle fonti originali; bozze, valutazioni e progressi restano nel tuo archivio locale. Le stime del tempo di studio vengono calcolate localmente, senza chiamate al modello.
+
+Include un archivio incrementale di registrazioni e materiali Polimi/Webex, predisposto per più corsi.
 Python 3.9+, Playwright, HTTPX e FFmpeg. Non richiede aria2, password in configurazione o servizi cloud.
 
 ## Avvio su macOS
@@ -325,8 +327,8 @@ Comandi diretti:
 --engine consente di specificare whisper-cli; --chunk-seconds cambia la durata dei
 blocchi (predefinita 300). Non cancellare sessioni/ se vuoi mantenere la ripresa.
 
-## Studio interattivo
+## Studiare con Trama
 
-Apri **Studio.command** oppure scegli **5) Apri Studio** da Avvia.command. Tutor Pi, attività HTML nella chat, laboratorio PRAM, fonti e ripassi. Configura il provider in **Modello e accesso**. [Guida e limiti](docs/studio/README.md).
+Apri **Studio.command** oppure scegli **5) Apri Trama** da Avvia.command. Tutor Pi, attività HTML nella chat, laboratorio PRAM, fonti e ripassi. Configura il provider in **Modello e accesso**. [Guida e limiti](docs/studio/README.md).
 
 Il motore di studio aggiornato è documentato in [Preparazione dalle fonti originali](docs/studio/PREPARAZIONE_VERIFICABILE.md).

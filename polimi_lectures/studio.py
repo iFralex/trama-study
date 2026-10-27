@@ -21,7 +21,7 @@ def main():
     node=shutil.which('node')
     npm=shutil.which('npm')
     if not node or not npm:
-        raise ValueError('Serve Node.js 22 o successivo. Installa Node.js, poi riapri Studio.')
+        raise ValueError('Serve Node.js 22 o successivo. Installa Node.js, poi riapri Trama.')
     version=subprocess.check_output([node,'-p','process.versions.node'],text=True).strip()
     if int(version.split('.')[0])<22:
         raise ValueError('Serve Node.js 22 o successivo; versione rilevata: '+version)
@@ -41,7 +41,7 @@ def main():
     installed=tools/'installed.sha256'
     env=dict(os.environ,STUDIO_ROOT=str(root),STUDIO_PROJECT=str(project),STUDIO_PYTHON=str(python),PYTHONDONTWRITEBYTECODE='1',npm_config_cache=str(root/'.state/npm-cache'))
     if not installed.exists() or installed.read_text()!=digest:
-        print('Preparo gli strumenti di Studio sul disco dati…',flush=True)
+        print('Preparo gli strumenti di Trama sul disco dati…',flush=True)
         for name in ('package.json','package-lock.json'):
             shutil.copy2(frontend/name,tools/name)
         subprocess.run([npm,'ci','--prefix',str(tools),'--no-audit','--no-fund'],env=env,check=True)
@@ -64,7 +64,7 @@ def main():
         with urllib.request.urlopen(url+'/api/bootstrap',timeout=1) as response:
             if 'courses' in json.load(response):
                 webbrowser.open(url)
-                print('Studio è già aperto: '+url)
+                print('Trama è già aperto: '+url)
                 return 0
     except (OSError,ValueError):
         pass
@@ -72,7 +72,7 @@ def main():
     try:
         for _ in range(100):
             if process.poll() is not None:
-                raise ValueError('Studio non è riuscito ad avviarsi. Controlla il messaggio nel terminale.')
+                raise ValueError('Trama non è riuscito ad avviarsi. Controlla il messaggio nel terminale.')
             try:
                 with urllib.request.urlopen(url+'/api/bootstrap',timeout=1):
                     break
@@ -81,7 +81,7 @@ def main():
         else:
             raise ValueError('Avvio non completato entro 20 secondi.')
         webbrowser.open(url)
-        print('\nStudio è aperto nel browser. Lascia questo terminale aperto. Ctrl+C per fermarlo.\n',flush=True)
+        print('\nTrama è aperto nel browser. Lascia questo terminale aperto. Ctrl+C per fermarlo.\n',flush=True)
         return process.wait()
     except KeyboardInterrupt:
         return 0
@@ -96,5 +96,5 @@ if __name__=='__main__':
     try:
         raise SystemExit(main())
     except (OSError,ValueError,subprocess.CalledProcessError) as exc:
-        print('Studio non avviato: '+str(exc),file=sys.stderr)
+        print('Trama non avviato: '+str(exc),file=sys.stderr)
         raise SystemExit(1)

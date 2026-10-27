@@ -27,7 +27,7 @@ def main():
         from .cli import main as run
         os.environ['POLIMI_LECTURES_QUIET'] = '1'
         while True:
-            print('\n1) Lezioni e materiali da WeBeep\n2) Trascrivi le lezioni scaricate\n3) Scegli il modello Whisper\n4) Associa slide e materiali alle lezioni\n5) Apri Studio · tutor interattivo\nq) Esci')
+            print('\n1) Lezioni e materiali da WeBeep\n2) Trascrivi le lezioni scaricate\n3) Scegli il modello Whisper\n4) Associa slide e materiali alle lezioni\n5) Apri Trama · tutor interattivo\nq) Esci')
             operation = input('Operazione [1] > ').strip().lower() or '1'
             if operation == 'q':
                 return 0

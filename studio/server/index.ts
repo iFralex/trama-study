@@ -152,6 +152,6 @@ app.post('/api/sessions/:sid/cancel',run(async(req,res)=>{await tutor.active.get
 app.use(express.static(path.resolve(directory,'../dist')));
 app.get('/{*splat}',(_req,res)=>res.sendFile(path.resolve(directory,'../dist/index.html')));
 app.use((error:any,_req:any,res:any,_next:any)=>{if(!res.headersSent)res.status(400).json({error:error.message??'Operazione non riuscita.'});});
-const server=app.listen(Number(process.env.STUDIO_PORT??4326),'127.0.0.1',()=>console.log(`Studio disponibile: http://127.0.0.1:${process.env.STUDIO_PORT??4326}`));
+const server=app.listen(Number(process.env.STUDIO_PORT??4326),'127.0.0.1',()=>console.log(`Trama disponibile: http://127.0.0.1:${process.env.STUDIO_PORT??4326}`));
 function close(){server.close();courseEngine.close();embeddings.close();bridge.close();process.exit(0);}
 process.on('SIGINT',close);process.on('SIGTERM',close);
