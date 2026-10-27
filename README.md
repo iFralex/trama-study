@@ -1,334 +1,218 @@
 # Trama
 
-Trama collega i materiali dei tuoi corsi a spiegazioni, esercizi, riscontri e percorsi di studio personali. Il tutor lavora sulle fonti originali; bozze, valutazioni e progressi restano nel tuo archivio locale. Le stime del tempo di studio vengono calcolate localmente, senza chiamate al modello.
+**Study from your own sources. Understand, practice, and pick up where you left off.**
 
-Include un archivio incrementale di registrazioni e materiali Polimi/Webex, predisposto per più corsi.
-Python 3.9+, Playwright, HTTPX e FFmpeg. Non richiede aria2, password in configurazione o servizi cloud.
+Trama is a local-first AI study companion that connects course materials to guided lessons, exercises, feedback, and a personal study path. It brings the chapter, tutor, original sources, and learning progress into one workspace.
 
-## Avvio su macOS
+The study workflow builds on the materials you provide. The included Polimi/WeBeep and Webex tools collect lectures and course files; the study engine can also work with materials organized locally for other courses.
 
-1. Apri `Setup.command`: prima chiede email Webex/Polimi e cartella dati, anche su un disco esterno. Invio mantiene i valori esistenti. Installa poi le dipendenze nella cartella del programma.
-2. Apri `Avvia.command`: parte direttamente il percorso guidato, senza scegliere prima un’operazione.
-3. Scrivi il nome o il codice del corso, oppure premi Invio per l’ultimo corso usato, incluso il suo anno accademico. Sono tollerati piccoli errori, ad esempio `paralel computing`. Digita `m` per le altre opzioni o `q` per uscire.
-4. Completa il login Polimi/SPID nel browser. L'app apre direttamente WeBeep, attende l'accesso e cerca il corso.
-5. Se ci sono più corrispondenze o anni accademici, scegli il corso dall'elenco nel Terminale.
-6. L'app apre l'archivio registrazioni e raccoglie l'elenco completo usando «tutte» o passando alle pagine successive.
-7. Scegli **1** per una lezione di prova, **2** per un intervallo di date, **3** per tutte oppure **4** per i materiali del corso.
-8. Per le date accetta `gg/mm/aaaa` e `YYYY-MM-DD`. Gli estremi sono inclusi; Invio lascia un estremo aperto. Vengono aperte su Webex solo le lezioni selezionate.
+**Current status:** experimental, macOS-first, with an Italian interface. The main README is in English; the detailed guides are currently in Italian.
 
-L'email Webex configurata viene inserita automaticamente; password, MFA ed eventuale
-password della registrazione rimangono manuali. L’app tenta anche l’avvio automatico del player; intervieni solo se il servizio richiede password/MFA o segnala un errore.
-Il catalogo del percorso guidato usa il nome completo del corso, incluso l'anno accademico,
-per evitare di mescolare corsi omonimi. I video già presenti vengono verificati e saltati.
+![Trama study workspace with a sample course](docs/images/trama-workspace.png)
 
-Il percorso è basato sugli HTML reali salvati dall'utente e su test browser con pagine
-simulate; la navigazione completa autenticata deve essere provata sul portale corrente.
-Se un corso usa una struttura diversa, resta disponibile l'opzione **6 — Raccolta manuale** in `Gestisci.command` (oppure digita `m` all’avvio):
-raggiungi l'elenco, usa `s` per i link o `a` per i pulsanti di riproduzione, cambia pagina
-se necessario e termina con `q`. Gli HTML diagnostici vengono conservati anche nel percorso guidato.
+*Screenshots use synthetic test data, not a personal course archive.*
 
-Se FFmpeg manca, installalo con il tuo gestore di pacchetti (ad esempio `brew install ffmpeg`).
-Non è installato automaticamente da questo progetto. Se Finder non apre i launcher,
-eseguili da Terminale con `bash Setup.command` e `bash Avvia.command`.
+<details>
+<summary>Mobile workspace</summary>
 
-## Terminale
+<img src="docs/images/trama-mobile.png" alt="Trama study workspace on a narrow mobile screen" width="390" />
 
-Esegui dalla cartella del progetto; non serve attivare l'ambiente virtuale:
+</details>
+
+[Get started](#get-started) · [Study workflow](#study-workflow) · [Data and model calls](#data-and-model-calls) · [Architecture](#architecture) · [Development](#development) · [Documentation](#documentation)
+
+## What Trama does
+
+| Area | Capabilities |
+| --- | --- |
+| Course preparation | Exam objectives, scope confirmation, prerequisites, chapter plans, examples, and independent practice. |
+| Original sources | Search and browse PDFs, notebooks, transcripts, text, HTML, and source code, with page, cell, or timestamp references where available. |
+| Study workspace | Chapter reader, course outline, optional tutor and source panels, light/dark themes, and layouts for desktop and mobile. |
+| Exercises and feedback | Saved drafts, submitted answers, inline assessments, hints, corrections, and optional extended tutor explanations. |
+| Learning continuity | Resume conversations and chapter positions; keep answers and assessments for identical exercises when starting a new tutor conversation. |
+| Study-time estimates | Local estimates for chapters and the whole course, including planned chapters whose lessons have not been created yet. |
+| Practice and recall | Scheduled FSRS recall, recorded use of hints, new practice variants, and reserved exam simulations. |
+| Lecture archive | Incremental Polimi/WeBeep material collection and Webex downloads, local Whisper transcription, and slide/video alignment tools. |
+
+### Preparation that can resume
+
+Chapter writing uses an outline and small batches of complete blocks. Completed work is checkpointed before continuing. Repairs target individual blocks and reuse corrections already validated; later repairs receive updated dependencies as context.
+
+Before publication, the preparation pipeline runs independent exercise solving, disciplinary review, and didactic review. Source-read receipts, structural validation, and checks for supported numerical models accompany the model reviews. Course references and external web references retain distinct provenance.
+
+Interruptions preserve checkpoints. A valid result can be recovered without asking the model to generate it again. Unresolved content issues remain visible, and dependent material can be suspended rather than presented as verified.
+
+These checks help catch mistakes; they do not establish that generated lessons are infallible.
+
+## Get started
+
+### Requirements
+
+The supported launch workflow is designed for macOS. Other platforms have not been validated end to end.
+
+- **Python 3.9+** for the launcher and archive tools.
+- **A native Python 3.12 installation** available to create the managed visual-analysis runtime.
+- **Node.js 22+**, including npm, for the local app and frontend build.
+- **Tesseract OCR** for the visual runtime used by the study app.
+- **FFmpeg and ffprobe** for the recording, audio, and transcription workflows.
+- Internet access for initial dependency/model downloads and the configured AI provider.
+- Access to an AI provider supported by the bundled Pi runtime for generated lessons and tutor responses.
+
+If you use Homebrew, the external tools can be installed with:
 
 ```bash
-.venv/bin/python -m polimi_lectures.cli doctor
-.venv/bin/python -m polimi_lectures.cli login
-.venv/bin/python -m polimi_lectures.cli wizard --course "Parallel Computing"
-.venv/bin/python -m polimi_lectures.cli discover --course "Parallel Computing"
-.venv/bin/python -m polimi_lectures.cli download --course "Parallel Computing" --limit 1
-.venv/bin/python -m polimi_lectures.cli download --course "Parallel Computing"
-.venv/bin/python -m polimi_lectures.cli status
+brew install python@3.12 node tesseract ffmpeg
 ```
 
-Puoi partire da una pagina corrente con `discover --url 'URL'` (meglio usare la modalità
-guidata se l'URL contiene token). Se serve, passa `--lesson-selector 'CSS'` a `discover`:
-il comando `a` cliccherà solo i controlli indicati, sulla pagina principale.
-Le iframe vengono esaminate per i link, ma i loro pulsanti richiedono navigazione manuale.
+Setup installs the project environment and Chromium. Starting Trama prepares its managed Python runtime, Node dependencies, frontend, and local embedding environment in the configured data directory. Initial setup can take longer than subsequent launches.
 
-Importazione di link Webex (un URL HTTPS per riga):
+### Install and launch
 
 ```bash
-.venv/bin/python -m polimi_lectures.cli add --course "Parallel Computing" --file lezioni.txt
-.venv/bin/python -m polimi_lectures.cli add --course "Parallel Computing" --url 'URL_WEBEX' --title 'Lezione 1' --date 2026-10-14
+git clone https://github.com/iFralex/trama-study.git
+cd trama-study
+bash Setup.command
+bash Studio.command
 ```
 
-`add` sullo stesso ID aggiorna titolo/data/link senza duplicare il video.
-Usa `download --before YYYY-MM-DD` per un limite di data **inclusivo**:
-le registrazioni senza data sono escluse e conteggiate nel messaggio iniziale.
-Non viene impostata una data d'esame presunta.
+Setup asks for the email used by the Webex/Polimi connector and a data directory, which can be on an external drive. This setup step still reflects the project's lecture-archive origins. Passwords and MFA remain in the dedicated login browser.
 
-`--root /percorso` e `--channel chrome` sono opzioni globali, prima del comando. Senza `--root`, tutti i comandi usano la cartella dati scelta nel setup.
-Normalmente il browser usato è il Chromium dedicato installato dal setup.
+Trama opens at **http://127.0.0.1:4326**. Keep the launcher terminal open while using the app; `Ctrl+C` stops it. The server binds to the local loopback address.
 
-## Download e archivio
+The launcher filename remains `Studio.command`, and the Python package remains `polimi_lectures`, to preserve existing commands and installations. The app itself is named Trama.
 
-Nella cartella del programma rimangono `.venv`, `.state/settings.json`,
-`.state/browser` (sessione Polimi/Webex) e `.state/browsers` (Chromium).
-Nella cartella dati selezionata vengono salvati:
+### Add course materials
+
+Use `Avvia.command` for the guided Polimi/WeBeep collection workflow, or place your own course files in the configured data directory:
 
 ```text
-.state/
-  catalog.sqlite3     # catalogo e link d'accesso, privato
-  debug-html/         # catture diagnostiche delle pagine
-corsi/
-  Parallel-Computing/
-    DATA_TITOLO_ID/
-      video.mp4
-      metadata.json
+<data-directory>/
+  corsi/
+    my-course-2026/
+      materiali/
+        lecture-slides.pdf
+        notes.md
+        examples.ipynb
 ```
 
-I nomi includono l'ID completo della registrazione. La data è presente solo quando rilevata
-o fornita. Il percorso resta stabile anche se in seguito arriva un titolo migliore.
-Il download cerca MP4 diretti nelle risposte del player Webex; in alternativa legge le
-playlist osservate nel browser. Per playlist byte-range con un unico MP4 risolve quel file,
-come nel procedimento manuale. Per le altre usa FFmpeg, copiando i flussi senza ricodifica.
+The `materiali` directory identifies a locally available course. Use distinct course/year folders to keep materials and progress separate. Trama also recognizes transcripts and alignments produced by its lecture tools.
 
-Gli MP4 HTTP interrotti possono essere ripresi se il server offre ETag/Last-Modified e Range;
-altrimenti ripartono da zero. HLS riparte da zero. Un file viene segnato completo solo dopo
-aver verificato durata positiva e presenza di audio e video con ffprobe: è un controllo
-strutturale, non una decodifica integrale di ogni fotogramma. I file già presenti vengono
-verificati e saltati. Gli errori di una lezione non fermano le successive.
+Open the app, choose the course, and connect an available model through **Modello e accesso** (“Model and access”). Provider authentication and model availability depend on your account. The repository does not contain your course materials or model credentials.
 
-Per nuove lezioni, ripeti raccolta e download: SQLite deduplica per corso e ID Webex.
-Puoi usare nomi di corso differenti per ampliare l'archivio. Audio e trascrizioni potranno
-essere aggiunti nelle stesse cartelle in una fase successiva.
+For the recording downloader, authentication, supported file layouts, transcription commands, and external-drive management, see the [lecture archive guide](docs/LECTURE_ARCHIVE_IT.md).
 
-## Dati locali
+## Study workflow
 
-Non inserire cookie o password in chat. Il login avviene nel browser dedicato e lo stato
-privato è in `.state`, con permessi restrittivi ed esclusione da Git. `.venv` e video sono
-esclusi da Git. Le URL firmate dei media e le risposte complete dell'API non vengono
-salvate; il database conserva il collegamento Webex necessario a riaprire la registrazione,
-che può contenere parametri di accesso. Nei metadata esportabili le query sono rimosse
-(tranne RCID identificativo). Non condividere `.state` o file di link con token.
-FFmpeg riceve temporaneamente URL e cookie come argomenti del processo locale.
+1. **Define the goal.** State the exam or learning objective. Trama inspects the available materials and proposes a scope for confirmation.
+2. **Prepare the path.** The app builds a course plan and prepares chapters progressively. Review progress, incomplete sources, and open issues in the preparation panel.
+3. **Study the chapter.** Read explanations and examples, open the original sources, and use the tutor when needed.
+4. **Submit an answer.** Your answer is saved first. The concise assessment appears below the exercise when it is ready. The extended explanation is generated when requested.
+5. **Continue or revisit.** Keep your chapter position, reopen previous conversations, and return to scheduled recall or practice.
 
-## Verifica sviluppo
+A new tutor conversation preserves work on the same exercise and chapter version. Changed exercises, separate paths, and autonomous exam/recall activities have their own boundaries. Starting a conversation does not create a duplicate assessment.
+
+### Study time without extra model calls
+
+Estimates are computed locally from visible content, formulas, code, activity types, explicit progress, and optional foreground study-time measurements.
+
+Available chapters are estimated from their actual content. Future chapters use the existing plan and course structure, with wider ranges until their content exists. Estimates cover total and remaining work; scheduled recall has a separate budget.
+
+You can set a daily study pace, mark sections as studied or needing review, and pause time tracking. Scrolling alone does not mark a section as learned. Estimates are approximate planning aids, not validated predictions of mastery or exam performance.
+
+## Data and model calls
+
+“Local-first” describes where the archive and application state live. AI features send the context needed for a request to your chosen provider.
+
+| Operation or data | Where it lives or runs |
+| --- | --- |
+| Original recordings and materials | Configured local data directory; study tools treat originals as read-only. |
+| Paths, chapters, attempts, assessments, review state | Local SQLite database in `.state/studio/studio.sqlite3` under the data directory. |
+| Draft recovery and display preferences | Browser storage, alongside persisted study data where applicable. |
+| Search embeddings and study-time estimates | Local processing; embedding models are downloaded initially. |
+| Lesson generation, tutor chat, and model assessments | Configured AI provider, receiving relevant materials, answers, and context. |
+| Additional web verification | Public web sources; provenance is recorded separately from course materials. |
+| Provider credentials | Pi authentication mechanisms, separate from the learning database. |
+
+The repository's ignore rules exclude course archives, `.state`, virtual environments, Node modules, and build outputs. Local browser sessions, diagnostic captures, and databases may contain private information and should remain outside Git.
+
+Reserved exam material is excluded from training retrieval and tutor context under the app's simulation policies. This is an application workflow boundary, not a guarantee of model correctness or assessment validity.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Materials[Local course materials] --> Store[Python services and SQLite]
+    Browser[React study workspace] <--> Server[Local Express server]
+    Server <--> Store
+    Server <--> Search[Local search and embeddings]
+    Server <--> Runtime[Pi agent runtime]
+    Runtime <--> Provider[Configured AI provider]
+```
+
+- **Frontend:** React, TypeScript, assistant-ui, Markdown, and KaTeX, built with Vite.
+- **Local server:** Express, the Pi agent runtime, study preparation orchestration, and FSRS scheduling.
+- **Data services:** Python, SQLite/FTS5, source indexing, course state, preparation validation, and local study-time estimates.
+- **Retrieval:** text search and multilingual local embeddings, with original-source references.
+- **Lecture tools:** Playwright, HTTPX, FFmpeg, local Whisper, and an isolated visual-analysis runtime.
+
+```text
+polimi_lectures/       Python archive, retrieval, preparation, and study services
+studio/src/           React application
+studio/server/        Local API, agent runtime, and preparation orchestration
+studio/tests/         TypeScript and Playwright tests
+tests/                Python tests and isolated data fixtures
+docs/                 Detailed usage, architecture, and verification guides
+```
+
+## Development
+
+Run the launcher once to prepare the managed environments and the `studio/node_modules` link. Run Python study tests with the managed native runtime, which includes PDF and numerical dependencies:
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+# From the repository root; use your configured data-directory path.
+TRAMA_DATA="/absolute/path/to/your/data"
+PYTHONDONTWRITEBYTECODE=1 "$TRAMA_DATA/.state/slides-runtime/bin/python" \
+  -m unittest discover -s tests -v
+
+cd studio
+npm test
+npm run build
 ```
 
-I test usano un server HTTP locale e video sintetici, non credenziali Polimi.
-Il test sul portale autenticato richiede una prima prova nel browser dell'utente.
+The automated agent tests use simulated local providers. They verify application behavior and SDK integration, not the educational quality of a commercial model.
 
-## Riferimenti consultati
+Playwright tests require isolated fixture data and a separate test server, normally on port `4327`. `STUDIO_TEST_URL` and `STUDIO_CHROME` configure the server and browser. Some feature tests also require their documented fixture flags. See the [verification guide](docs/studio/VERIFICA.md) and fixture scripts in `tests/`. Do not run state-changing browser tests against a personal study archive.
 
-- https://github.com/paolobasso99/polimi_recordings_downloader (archiviato; issue RecMan)
-- https://github.com/jacopo-j/WebXDownloader (campi stream/fallbackPlaySrc)
-- https://github.com/beryxz/unifi-webex-dl (playlist byte-range e MP4)
-- https://playwright.dev/python/docs/auth
-- https://playwright.dev/python/docs/network
+Real-provider comparison and course-verification scripts are separate from the default tests and may send materials to the configured provider or incur usage charges.
 
-Implementazione originale; non copia il codice dei progetti elencati.
+## Current limits
 
-## Email Webex e HTML diagnostici
+- Generated lessons, open-ended assessments, and model reviews are provisional. Important claims should be checked against the original materials.
+- The curated PRAM/reduction/prefix-sum path has more focused verification than arbitrary generated courses. Course plans for other subjects depend on their sources and the model.
+- Transcripts, OCR, and slide/video associations can be incomplete or inaccurate. Source quality and unresolved discrepancies remain relevant.
+- Local timing is an approximation; quiet reading, work away from the computer, and differences between subjects limit its precision.
+- The current launch and acquisition workflows are macOS- and Polimi-oriented. The interface is currently Italian.
+- Trama is designed for a local user. Remote hosting and multi-user deployment are not supported workflows.
+- Native CUDA execution and handwritten input are not included.
 
-La configurazione locale `.state/settings.json`, nella cartella del programma, contiene email Polimi, `data_dir` e `debug_html`.
-Quando compare il modulo email su un dominio Webex, il programma inserisce l'indirizzo
-configurato e preme Accedi/Avanti una sola volta per documento. Password e MFA rimangono
-manuali; l'assistente non compila moduli su domini esterni a Webex.
+## Documentation
 
-Con `debug_html: true` vengono raccolte copie del DOM delle pagine e iframe in
-`.state/debug-html/SESSIONE/`: dopo le navigazioni, periodicamente quando cambia il DOM,
-e prima della chiusura. I redirect molto rapidi possono non produrre una copia leggibile.
-Sono snapshot HTML, non archivi offline completi: CSS, immagini, shadow DOM e canvas
-non vengono esportati. I valori dei campi password e hidden vengono rimossi dalla copia,
-senza modificare la pagina reale. Gli HTML possono comunque contenere URL o dati privati
-nei link e negli script: restano nella cartella privata esclusa da Git, con permessi 600.
-Nelle catture HTML non vengono esportati cookie o risposte di rete. I metadata delle catture omettono query e
-frammenti degli URL. Ogni sessione ha una cartella distinta; contenuti identici non vengono
-risalvati. Per disattivare la diagnostica imposta `debug_html` a `false`.
+Detailed guides are currently in Italian:
 
-Le modifiche diventano attive alla successiva apertura di `Avvia.command`; non si
-applicano a un processo già in esecuzione. Gli HTML di tentativi precedenti all'attivazione
-non sono disponibili retroattivamente.
+| Guide | Contents |
+| --- | --- |
+| [Study app](docs/studio/README.md) | Interface, model access, retrieval, formulas, themes, and persistence. |
+| [Personal course](docs/studio/CORSO_PERSONALE.md) | Objectives, course plans, chapters, practice, and reserved exams. |
+| [Source-grounded preparation](docs/studio/PREPARAZIONE_VERIFICABILE.md) | Scope selection, reviews, source validation, checkpoints, and recovery. |
+| [Study-time estimates](docs/studio/TEMPI_DI_STUDIO.md) | Local estimation, future chapters, progress, timing, and calibration. |
+| [Architecture](docs/studio/ARCHITETTURA.md) | Application components and data flows. |
+| [Verification](docs/studio/VERIFICA.md) | Technical checks and the limits of educational validation. |
+| [Token audit](docs/studio/AUDIT_TOKEN.md) | Request costs and opportunities to reduce redundant context. |
+| [Chat context](docs/studio/CONFRONTO_CONTESTO_CHAT.md) | Compact context, on-demand retrieval, and comparisons. |
+| [Lecture archive](docs/LECTURE_ARCHIVE_IT.md) | Recording downloads, authentication, materials, transcription, and storage. |
 
-## Cambiare email o disco dati
+## Project background
 
-Chiudi il browser del downloader e termina la prova in corso prima di cambiare cartella.
-Riapri `Setup.command`: chiede prima l'email, poi la cartella dati. Puoi scrivere ad esempio
-`/Volumes/Nome Disco/Lezioni Polimi` oppure trascinare una cartella dal Finder nel Terminale.
-I percorsi con spazi sono supportati. Il disco esterno deve essere collegato e montato.
-Per conservare un valore attuale, premi Invio. I launcher mostrano la cartella dati in uso.
+Trama grew from a local lecture archive into a source-grounded study workspace. The original archive's implementation notes and references are preserved in the [archive guide](docs/LECTURE_ARCHIVE_IT.md#riferimenti-consultati).
 
-Se esistono dati nella vecchia posizione, il setup copia catalogo, HTML diagnostici e
-cartella `corsi` nella destinazione, verificando il contenuto del catalogo SQLite prima
-di aggiornare la configurazione. La destinazione non deve già contenere `.state` o
-`corsi`, per evitare sovrascritture. Gli originali vengono conservati; potranno essere
-rimossi manualmente dopo aver verificato il nuovo archivio. Non vengono copiati ambiente
-Python, browser, sessione di accesso o cache del programma. La sessione resta locale e
-viene riutilizzata fino alla sua scadenza.
-
-Il programma si ferma se la cartella dati configurata non è disponibile, invece di
-creare un archivio vuoto al posto di un disco scollegato. I dati della cartella esterna
-sono privati come quelli locali: non pubblicare catalogo o HTML diagnostici.
-
-Per modificare soltanto la configurazione, senza eseguire l'installazione delle dipendenze:
-
-```bash
-.venv/bin/python -m polimi_lectures.configure
-```
-
-## Riutilizzo del login
-
-Oltre al profilo Chromium, l'app salva cookie e localStorage Polimi/Webex nel file privato
-`.state/auth-state.json` accanto al programma. Il salvataggio avviene periodicamente e
-prima della chiusura; all'avvio vengono ripristinati i cookie mancanti e i valori di
-localStorage assenti. Le scadenze originali non vengono modificate e un cookie più recente
-presente nel profilo non viene sovrascritto. Il file è escluso da Git e ha permessi 600;
-contiene dati di accesso e non deve essere condiviso. Lo stato di PosteID non viene
-esportato in questo file. Il file resta locale anche cambiando disco dati.
-
-Il percorso guidato verifica prima l'accesso a WeBeep e prosegue direttamente quando è
-già disponibile. Se Polimi/Webex hanno invalidato la sessione, sarà richiesto un nuovo
-login: il salvataggio locale non può mantenere valida una sessione scaduta sul server.
-Dopo l'aggiornamento potrebbe servire un primo accesso per creare lo stato esplicito.
-
-Il salvataggio periodico dell'accesso legge i cookie e il localStorage dai frame già
-aperti. Non usa `storage_state()` durante l'esecuzione, perché Playwright può creare
-schede temporanee per leggere origin non più aperti e riportare Chrome in primo piano.
-Per origin non aperti conserva i valori salvati in precedenza. Le catture HTML restano attive.
-Il login email supporta anche il markup Webex con `button#IDButton2` dichiarato `role="link"`:
-compila il campo, attiva la validazione e invia Accedi. I tentativi con pulsante disabilitato
-non spostano il focus nel campo email. Le password e le conferme SPID/MFA richieste dal
-servizio restano nel browser dell'utente.
-
-## Avvio semplificato
-
-`Avvia.command` propone direttamente il corso. La scelta dell'ultimo corso viene salvata
-in `last_course` nella configurazione locale; premendo Invio la ricerca usa il nome completo,
-anno compreso, evitando di richiedere di nuovo la scelta tra anni accademici. Per cambiarlo
-basta scrivere un nuovo nome. Il passaggio automatico SSO verso RecMan viene atteso senza
-conferme nel Terminale. Solo una richiesta effettiva di autenticazione richiede intervento.
-
-Nel percorso normale sono mostrati titoli brevi, percentuale e tempo residuo stimato,
-poi il conteggio di file scaricati, già presenti e non riusciti, con il percorso di salvataggio.
-Il titolo completo rimane nei metadati. Dopo il riepilogo appare un menu per continuare: altre lezioni, materiali, eliminazione del
-video di prova, cartella nel Finder o cambio corso. `q` termina la sessione. I dettagli tecnici sono nascosti ma la diagnostica HTML resta attiva.
-Le funzioni precedenti sono in `Gestisci.command`, accessibile digitando `m` all'avvio.
-I comandi CLI diretti mantengono l'output dettagliato.
-
-## Continuare dopo una prova
-
-Dopo il download il browser resta aperto e il menu chiede cosa fare: **1** altre lezioni,
-**2** materiali, **3** eliminare il video di prova (solo quando una prova è stata scelta),
-**4** aprire l'archivio, **5** cambiare corso, **q** uscire. Il corso e l'elenco delle lezioni
-restano disponibili nella stessa sessione. Eliminare la prova rimuove solo `video.mp4`
-e i suoi `metadata.json`, rimettendo la registrazione in attesa nel catalogo. Appunti,
-trascrizioni e altri file non vengono toccati. La scelta 3 è l'azione di eliminazione.
-
-La prima ricerca di un corso chiede di scegliere l’anno quando ci sono più risultati.
-La scelta viene ricordata separatamente per ciascun corso: scrivendo di nuovo il nome
-breve viene riutilizzato il corso/anno scelto, anche dopo aver aperto altri corsi,
-se è ancora disponibile. Il meccanismo vale per qualunque nome di corso. Per cambiare anno scrivilo nel nome,
-ad esempio `parallel computing 2026-27`. Le preferenze sono nel file locale settings.json.
-
-## Materiali WeBeep
-
-Dal menu delle registrazioni scegli **4**, oppure dopo un download scegli **2**.
-Puoi accedere direttamente anche con **m → 7** all'avvio, senza passare da RecMan,
-o dal Terminale con:
-
-```bash
-.venv/bin/python -m polimi_lectures.cli materials --course "Parallel Computing"
-```
-
-La funzione esplora cartelle, risorse e pagine del corso; propone tutti i materiali
-individuati, singoli elementi (es. `1,3,5-8`) oppure interi gruppi/cartelle. Le sottocartelle
-dei file vengono mantenute. Le pagine come Links sono salvate come HTML senza script,
-form o iframe; i collegamenti esterni rimangono link, non vengono scaricati ricorsivamente.
-I file sono in `corsi/NOME-CORSO/materiali/`, con un indice per verificare i file già
-scaricati e usare richieste condizionali quando il server fornisce ETag/Last-Modified.
-Le cartelle senza file leggibili vengono segnalate esplicitamente e i loro HTML salvati.
-
-Verificato sugli HTML reali delle cartelle Exams e Course lectures: 63 file riconosciuti.
-Eseguita anche una prova autenticata di download di un PDF in una cartella temporanea,
-rimossa al termine. Per altri corsi il funzionamento dipende dai tipi di risorsa usati;
-moduli che restituiscono una pagina invece di un file sono segnalati, senza salvarli
-come PDF erroneamente. I materiali non vengono scaricati automaticamente senza selezione.
-
-## Avanzamento globale delle lezioni
-
-Durante il download sono mostrate due righe: avanzamento della lezione corrente e
-avanzamento di tutte le lezioni selezionate, con MB, percentuale e conteggio delle lezioni
-verificate. Il simbolo ≈ indica che il totale include dimensioni arrotondate del portale;
-le dimensioni esatte vengono aggiornate dalle risposte HTTP e dai video completati.
-Se manca una dimensione, il totale è indicato come da determinare. I file già presenti
-contano dopo la verifica; i byte di una ripresa vengono conteggiati una sola volta.
-Il totale riguarda la selezione corrente, non tutti i corsi dell’archivio.
-
-## Trascrizione locale con Whisper
-
-All’avvio scegli il corso, poi **2) Trascrivi le lezioni scaricate**. Non serve
-accedere a WeBeep: il corso è scelto dal catalogo locale e mantiene la preferenza
-dell’anno. Puoi trascrivere tutte le lezioni da completare, la prima per una prova
-o una selezione numerica. Dopo un download la stessa funzione è nel menu **6**;
-nel menu avanzato è **8**, mentre **9** configura il modello.
-
-Il primo utilizzo permette di scaricare un modello oppure indicare un file modello
-già presente (anche trascinandolo dal Finder). Il motore è
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp), con modelli **GGML .bin**:
-i checkpoint .pt di openai-whisper e le cartelle CTranslate2 richiedono un altro
-motore e non sono accettati da questa integrazione. Il menu usa il catalogo del
-repository indicato dal progetto, mostra le dimensioni e verifica SHA-256 dopo il
-download. I modelli .en sono solo inglese; q5/q8 indicano versioni più compatte.
-La scelta rimane salvata, e può essere cambiata dal menu del modello. Il programma
-propone small per iniziare; la lingua può essere auto, en, it o un altro codice
-Whisper. Non viene richiesta la traduzione in inglese.
-
-Su Apple Silicon viene preferito /opt/homebrew/bin/whisper-cli quando disponibile.
-Se manca, installa il motore con [brew install whisper.cpp](https://formulae.brew.sh/formula/whisper.cpp).
-FFmpeg e ffprobe sono quelli già usati per i video. Non servono nuove dipendenze Python
-pesanti. L’audio è elaborato localmente.
-
-Ogni lezione ha una cartella trascrizione accanto a video.mp4, contenente:
-- trascrizione.txt: testo leggibile;
-- trascrizione.srt: sottotitoli con tempi riferiti all’intera lezione;
-- trascrizione.json: segmenti, tempi e informazioni di provenienza;
-- sessioni/: blocchi di lavoro e checkpoint;
-- completa.json: verifica di completamento e integrità delle esportazioni.
-
-Il lavoro viene salvato dopo ogni blocco di **5 minuti**. In caso di chiusura, crash
-o Ctrl+C, scegli nuovamente la trascrizione del corso: i blocchi completi vengono
-riutilizzati e solo il blocco interrotto viene rielaborato. La ripresa non avviene
-a metà di un blocco. Anche un crash dopo l’ultimo blocco, prima delle esportazioni,
-permette di ricostruire i file senza rifare Whisper. I blocchi danneggiati vengono
-rifatti. Le trascrizioni complete sono saltate dopo aver verificato la presenza e
-gli hash degli output e che il video non sia cambiato. Sono saltate anche quando
-si sceglie un modello diverso. Per le trascrizioni parziali, cambiare modello,
-lingua o durata dei blocchi crea una sessione separata e conserva quella precedente;
-riselezionando le stesse impostazioni la si può riprendere. I tagli tra blocchi
-possono ridurre il contesto del riconoscimento: il testo precedente viene passato
-come contesto al blocco successivo, ma la trascrizione richiede comunque revisione.
-
-Modelli, audio temporaneo e checkpoint stanno nella **cartella dati** scelta nel
-setup. I modelli scaricati sono in modelli/whisper; le preferenze Whisper in
-.state/whisper/settings.json. Un download interrotto del modello conserva il parziale
-e tenta la ripresa HTTP; se il server non la supporta ricomincia quel file. Il modello
-viene utilizzato solo dopo la verifica completa. Un modello indicato con percorso
-esterno viene letto nella posizione scelta. Il cambio cartella dati copia anche i
-modelli interni e aggiorna il loro percorso.
-
-Comandi diretti:
-
-```bash
-.venv/bin/python -m polimi_lectures.cli transcribe --course "Nome del corso"
-.venv/bin/python -m polimi_lectures.cli transcribe --course "Nome del corso" --all --model "/disco/ggml-small.bin" --language en
-.venv/bin/python -m polimi_lectures.cli transcribe --course "Nome del corso" --model-name small --limit 1 --language auto
-.venv/bin/python -m polimi_lectures.cli whisper-model
-```
-
---engine consente di specificare whisper-cli; --chunk-seconds cambia la durata dei
-blocchi (predefinita 300). Non cancellare sessioni/ se vuoi mantenere la ripresa.
-
-## Studiare con Trama
-
-Apri **Studio.command** oppure scegli **5) Apri Trama** da Avvia.command. Tutor Pi, attività HTML nella chat, laboratorio PRAM, fonti e ripassi. Configura il provider in **Modello e accesso**. [Guida e limiti](docs/studio/README.md).
-
-Il motore di studio aggiornato è documentato in [Preparazione dalle fonti originali](docs/studio/PREPARAZIONE_VERIFICABILE.md).
+For bug reports, describe the action, expected behavior, and actual result. Remove private course content, access URLs, cookies, and credentials before sharing logs or screenshots in [GitHub issues](https://github.com/iFralex/trama-study/issues).
