@@ -1,6 +1,18 @@
 import React,{useMemo,useState} from 'react';
 const phases:Record<string,string>={scope:'Definizione dell’esame',selection:'Selezione delle fonti',exam_reading:'Analisi degli esami autentici',evidence_reading:'Lettura delle fonti selezionate',map_outline:'Indice dei capitoli',map_contribution:'Contributi alla mappa',map:'Riconciliazione completa della mappa',map_review:'Revisione della mappa',chapter:'Scrittura del capitolo',repair_chapter:'Correzione del capitolo',review_solve:'Risoluzione indipendente degli esercizi',review_discipline:'Revisione disciplinare completa',review_didactic:'Revisione didattica completa',publish:'Pubblicazione del capitolo revisionato'};
 const states:Record<string,string>={relevant:'Pertinente',prerequisite:'Prerequisito',outside:'Fuori perimetro',uncertain:'Da verificare',unreviewed:'Da selezionare'};
+export function preparationSummary(path:any):string{
+  const task=path.preparation?.current_task;
+  if(!task)return 'Passaggio alla prossima fase di preparazione. Puoi continuare a studiare.';
+  const index=path.chapters.findIndex((chapter:any)=>chapter.id===task.chapter_id);
+  const chapter=task.chapter_title??path.chapters[index]?.title;
+  const subject=chapter?(index>=0?'Capitolo '+(index+1)+' / '+path.chapters.length:'Capitolo')+' «'+chapter+'»: ':'';
+  const phase=phases[task.kind]??phases[path.preparation?.phase]??'Preparazione dei contenuti';
+  const action=task.state==='correcting'?'Correzione del risultato della fase «'+phase+'»':phase;
+  const progress=task.repair_progress??task.chapter_progress;
+  const saved=progress?' · '+progress.done+(progress.total?' / '+progress.total:'')+' blocchi '+(task.repair_progress?'corretti':'salvati'):'';
+  return subject+action+saved+'. Puoi continuare a studiare.';
+}
 export function PreparationPanel({path,onDecision,onIssue,onSource,working}:{path:any,onDecision:(source:string,status:string,reason:string)=>Promise<void>,onIssue:(id:string,note:string)=>Promise<void>,onSource:(id:string)=>void,working:boolean}){
   const [notes,setNotes]=useState<Record<string,string>>({}),[limits,setLimits]=useState<Record<string,number>>({});
   const groups=useMemo(()=>{

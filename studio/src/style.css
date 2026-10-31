@@ -74,4 +74,11 @@ main:has(>.study-layout.inline){display:flex;flex-direction:column;min-height:10
 .study-block-progress{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:20px;min-height:36px}.study-block-progress>span{font-size:11px;margin-right:auto}.study-block-progress button{font-size:11px;min-width:80px;padding:5px 8px}.study-block-progress button[aria-pressed=true]{background:var(--green);color:var(--paper)}
 @media(max-width:900px){.study-time-toolbar{font-size:11px;padding:7px 10px}.study-time-totals{gap:16px}.study-time-totals strong{font-size:21px}.study-block-progress>span{width:100%}.study-time-overview{padding:12px}}
 .study-time-toolbar>div:first-child{flex:1;min-width:215px}.study-clock>span{display:inline-block;width:155px;flex-shrink:0}
+
+/* Keep the chapter toolbar and reading surface in view during focused study. */
+.shell:has(.study-focused)>.rail,.shell:has(.study-focused)>main>.topbar,
+.course-studio:has(.study-focused)>:not(.study-space),.study-focused>.resume-card{display:none}
+.course-studio:has(.study-focused){padding:14px}
+.reading-toolbar,.reading-tools{flex-wrap:wrap}
+.reading-tools .study-focus-toggle[aria-pressed=true]{background:var(--green);color:var(--paper);border-color:var(--green)}
 .study-block-progress button[data-study-state=todo][aria-pressed=true]{background:var(--line);color:var(--muted)}.study-block-progress button[data-study-state=review][aria-pressed=true]{background:color-mix(in srgb,var(--gold) 20%,var(--paper));color:var(--green);border-color:var(--gold)}

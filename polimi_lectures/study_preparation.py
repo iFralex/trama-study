@@ -864,7 +864,7 @@ class PreparationStudy(ChapterPreparation,MapStudy):
     def preparation_progress(self,path):
         run=self.db.execute('SELECT * FROM prep_runs WHERE path=?',(path,)).fetchone()
         if not run:return None
-        current=self.db.execute('SELECT kind,state,started,error,attempts,metrics FROM prep_tasks WHERE id=?',(run['current'],)).fetchone() if run['current'] else None
+        current=self.db.execute("SELECT kind,state,started,error,attempts,metrics,json_extract(input,'$.chapter.id') AS chapter_id,json_extract(input,'$.chapter.title') AS chapter_title FROM prep_tasks WHERE id=?",(run['current'],)).fetchone() if run['current'] else None
         counts=dict(self.db.execute('SELECT state,count(*) FROM prep_tasks WHERE path=? GROUP BY state',(path,)).fetchall())
         details=dict(current) if current else None
         if details:
