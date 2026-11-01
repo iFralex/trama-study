@@ -38,3 +38,42 @@ test('complete legacy responses continue through the original final validator',a
  const result=await writeChapter(task,null,'Instructions',async()=>JSON.stringify({blocks}),async()=>{throw Error('Unexpected checkpoint');},()=>false);
  assert.deepEqual(result,{blocks});
 });
+
+const focusTask={...task,exam_policy:{version:1,questions:[{id:'q1',format:'open',text:'Describe and motivate the distinction.',label:'Exam · p. 1',sources:['exam-source']}],available_chapters:[]}};
+const focus=(role:string)=>({role,exam_refs:['exam','foundation'].includes(role)?['q1']:[],reason:'Collegamento motivato alla classificazione richiesta.'});
+const focusedOutline=outline.map((row,index)=>({...row,focus:focus('exam'),depends_on:index?[outline[index-1].id]:[]}));
+const focusedBlocks=blocks.map(block=>block.kind==='activity'?{...block,spec:{...block.spec,origin:'adapted',exam_variant:{question:'q1',adaptation:'New scenario with the same reasoning and response structure.'}}}:block);
+
+test('exam focus is planned once and automatically carried into every saved section',async()=>{
+ let calls=0;const prompts:string[]=[];
+ const result=await writeChapter(focusTask,null,'Instructions',async prompt=>{prompts.push(prompt);return JSON.stringify(calls++===0?{outline:focusedOutline}:{blocks:focusedBlocks.slice((calls-2)*2,(calls-1)*2)});},save,()=>false);
+ assert.equal(result.exam_focus_version,1);
+ assert.deepEqual(result.blocks[2].focus,focusedOutline[2].focus);
+ assert.equal(result.blocks[2].learning_role,'independent');
+ assert.deepEqual(result.blocks[2].depends_on,['worked']);
+ assert.match(prompts[0],/stessa struttura/);
+ assert.doesNotMatch(prompts[1],/Compito \(dati\)/);
+});
+
+test('a complementary chapter can explain its content without inventing exercises',async()=>{
+ const row={...outline[0],covers:[0,1],focus:focus('support'),depends_on:[]};let calls=0;
+ const result=await writeChapter(focusTask,null,'Instructions',async()=>JSON.stringify(calls++===0?{outline:[row]}:{blocks:[blocks[0]]}),save,()=>false);
+ assert.equal(result.blocks.length,1);assert.equal(result.blocks[0].kind,'text');assert.equal(result.blocks[0].focus.role,'support');
+});
+
+test('exam focus rejects fabricated evidence, complementary exercises and future prerequisites',async()=>{
+ for(const change of ['fake','support','future','disguised']){
+  const rows=structuredClone(focusedOutline);
+  if(change==='fake')rows[0].focus.exam_refs=['invented'];
+  if(change==='support')rows[2].focus=focus('support');
+  if(change==='future')rows[0].depends_on=['exercise'];
+  if(change==='disguised')rows[2].role='explain';
+  await assert.rejects(writeChapter(focusTask,null,'Instructions',async()=>JSON.stringify({outline:rows}),save,()=>false),/Indice di scrittura/);
+ }
+});
+
+test('autonomous exam variants preserve the original response format',async()=>{
+ const recovery={version:1,outline:focusedOutline,blocks:focusedBlocks.slice(0,2)};
+ const bad={...focusedBlocks[2],spec:{...focusedBlocks[2].spec,kind:'choice'}};
+ await assert.rejects(writeChapter(focusTask,recovery,'Instructions',async()=>JSON.stringify({blocks:[bad,focusedBlocks[3]]}),save,()=>false),/formato/);
+});

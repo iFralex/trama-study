@@ -209,7 +209,7 @@ class CourseStudy(StudyTimeStudy,LearningContinuity):
                     for block in current['content']['blocks']:
                         if block['kind']=='activity':
                             instance=self.db.execute('SELECT activity,activity_version FROM course_chapter_activities WHERE session=? AND chapter=? AND version=? AND block=?',(session['session'],session['chapter'],current['version'],block['id'])).fetchone()
-                            blocks.append({'id':block['id'],'kind':'activity','activity':instance[0] if instance else None,'activity_version':instance[1] if instance else None})
+                            blocks.append({'id':block['id'],'kind':'activity','activity':instance[0] if instance else None,'activity_version':instance[1] if instance else None,**({'focus':block['focus']} if block.get('focus') else {})})
                         else: blocks.append(block)
                     current={**current,'content':{**current['content'],'blocks':blocks},'stale':self._chapter_stale(current)}
         reservations=[dict(r) for r in self.db.execute('SELECT r.*,d.path FROM course_reservations r JOIN documents d ON d.id=r.document WHERE r.course=?',(p['course'],))]
@@ -418,6 +418,8 @@ class CourseStudy(StudyTimeStudy,LearningContinuity):
         for b in blocks:
             if not b.get('id') or b.get('kind') not in ('text','activity'):raise ValueError('Blocco non valido.')
             refs=self._refs(p['course'],b.get('sources',[]) if b['kind']=='text' else b.get('spec',{}).get('sources',[]))
+            for reference in b.get('focus',{}).get('references',[]):
+                refs=list(dict.fromkeys(refs+self._refs(p['course'],reference['sources'])))
             for s in refs:
                 source=self.source(s,allow_solutions=False);doc=self.db.execute('SELECT fingerprint FROM documents WHERE id=?',(source['document'],)).fetchone()
                 dependencies[source['document']]=doc[0]

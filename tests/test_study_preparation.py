@@ -12,6 +12,8 @@ class PreparationTest(unittest.TestCase):
     tearDown=fixtures.StudyTest.tearDown
 
     def start(self,map_strategy='legacy'):
+        # These fixtures exercise compatibility with chapters written before exam focus.
+        self.store.setting('exam_focus_enabled',False)
         held=next(d['id'] for d in self.store.course_inventory(self.course)['documents'] if d['title']=='PC-1st-part-25-07-21.pdf')
         p=self.store.course_create(self.course,'Primo parziale: PRAM',reserved=[held],map_strategy=map_strategy);self.path=p['id'];self.sid=p['sid']
         task=self.task();self.commit(task,{'summary':'Primo parziale PRAM','included':['PRAM'],'excluded':['Secondo parziale'],'clarification':None})

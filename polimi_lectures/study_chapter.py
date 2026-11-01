@@ -3,6 +3,7 @@ import copy
 import json
 import math
 import re
+from .study_exam_focus import ExamFocusStudy
 
 
 def recover_chapter_blocks(text):
@@ -36,7 +37,7 @@ def recover_chapter_blocks(text):
     return []
 
 
-class ChapterPreparation:
+class ChapterPreparation(ExamFocusStudy):
     @staticmethod
     def _repair_targets(task):
         blocks=task['draft']['blocks'];ids={b['id'] for b in blocks}
@@ -47,10 +48,15 @@ class ChapterPreparation:
     def _repair_block_validate(self,path,task,block):
         original=next((b for b in task['draft']['blocks'] if b['id']==block.get('id')),None)
         if not original or block.get('kind')!=original['kind']:raise ValueError('Identità del blocco corretto non valida.')
+        if original.get('focus') and any(block.get(key)!=original.get(key) for key in ('focus','learning_role','depends_on')):
+            raise ValueError('Priorità esame: conserva classificazione e prerequisiti del blocco durante la correzione.')
         if block==original:return
         self._prep_refs(path,task,block.get('sources',block.get('spec',{}).get('sources',[])))
         self._chapter_blocks_normalized(task,[block])
         content=dict(task['draft'],blocks=[block if b['id']==block['id'] else b for b in task['draft']['blocks']])
+        if task.get('exam_policy',{}).get('version')==1:
+            rows=[dict(id=b['id'],kind=b['kind'],role=b.get('learning_role'),focus=b.get('focus'),depends_on=b.get('depends_on',[])) for b in content['blocks']]
+            self._exam_focus_blocks(task,rows,content['blocks'])
         self._validate_chapter_content(path,task['chapter']['id'],content)
         self._deterministic_checks(copy.deepcopy(content))
 
@@ -134,13 +140,13 @@ class ChapterPreparation:
             call = json.loads(row['data']);candidate = recover_chapter_blocks(call.get('output', ''))
             if call.get('protocol') == 'chapter-batches-1':
                 if outline and candidate and [b.get('id') for b in candidate] == [b['id'] for b in outline[len(blocks):len(blocks) + len(candidate)]]:
-                    try:blocks = self._chapter_prefix_validate(path, task, blocks + candidate)
+                    try:blocks = self._chapter_prefix_validate(path, task, self._exam_focus_blocks(task, outline, blocks + candidate))
                     except (ValueError, KeyError, TypeError):pass
             elif len(candidate) > len(blocks) and (not blocks or candidate[:len(blocks)] == blocks):
                 blocks = candidate
         if not blocks and not outline:return None
         try:
-            normalized = self._chapter_prefix_validate(path, task, blocks)
+            normalized = self._chapter_prefix_validate(path, task, self._exam_focus_blocks(task, outline, blocks))
             return {'version': 1, 'outline': outline, 'blocks': normalized, 'error': ''}
         except (ValueError, KeyError, TypeError) as error:
             return {'version': 1, 'outline': outline, 'blocks': blocks, 'error': str(error)}
@@ -154,14 +160,15 @@ class ChapterPreparation:
             raise ValueError('Checkpoint di scrittura non valido.')
         outline = checkpoint.get('outline', []);blocks = checkpoint.get('blocks', [])
         limit = original['chapter_limits']['max_blocks']
-        if not isinstance(outline, list) or not 3 <= len(outline) <= limit or any(not isinstance(r, dict) or not r.get('id') or r.get('kind') not in ('text', 'activity') for r in outline):
+        minimum = 1 if original.get('exam_policy', {}).get('version') == 1 else 3
+        if not isinstance(outline, list) or not minimum <= len(outline) <= limit or any(not isinstance(r, dict) or not r.get('id') or r.get('kind') not in ('text', 'activity') for r in outline):
             raise ValueError('Indice dei blocchi del capitolo non valido.')
         ids = [r['id'] for r in outline]
         if len(set(ids)) != len(ids) or not isinstance(blocks, list) or [b.get('id') for b in blocks] != ids[:len(blocks)]:
             raise ValueError('I blocchi salvati devono seguire esattamente l’indice, senza duplicati.')
         if len(blocks) > len(outline) or any(b.get('kind') != r['kind'] for b, r in zip(blocks, outline)):
             raise ValueError('Tipo o numero di blocchi incoerente con l’indice.')
-        blocks = self._chapter_prefix_validate(path, original, blocks)
+        blocks = self._chapter_prefix_validate(path, original, self._exam_focus_blocks(original, outline, blocks))
         metrics = json.loads(row['metrics'] or '{}');previous = metrics.get('chapter_checkpoint', {})
         if previous.get('version') == 1:
             old_blocks = previous.get('blocks', [])

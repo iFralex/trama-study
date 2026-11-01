@@ -21,6 +21,25 @@ Il provider è quello configurato in Pi. Nessuna nuova autenticazione è richies
 
 I capitoli restanti conservano il progetto didattico e vengono sviluppati quando ci si avvicina allo studio. Il percorso può adattarsi alle evidenze personali mantenendo versioni e possibilità di ripristino.
 
+## Priorità dei prossimi capitoli
+
+Per le nuove scritture, l’indice classifica ogni sezione prima della produzione del testo:
+
+| Etichetta | Trattamento |
+| --- | --- |
+| Esame | Competenza richiesta in quesiti autentici pertinenti: spiegazione, esempio svolto e pratica guidata/autonoma. |
+| Fondamento | Prerequisito necessario a una competenza d’esame, anche successiva: conserva spiegazione completa e pratica. Il collegamento deve essere motivato. |
+| Complementare | Materiale del corso senza un collegamento necessario dimostrato: spiegazione ed eventuale esempio svolto, senza esercizi assegnati. |
+| Da verificare | Evidenza insufficiente: spiegazione con incertezza esplicita, senza esercizi assegnati. Non significa esclusione dal programma. |
+
+La classificazione è per sezione, non per capitolo intero. Un collegamento tematico non basta a rendere un argomento fondante: deve servire a una capacità richiesta. Le etichette espandibili mostrano motivo e riferimenti ai temi. I vecchi capitoli restano privi di una classificazione retroattiva; un checkpoint precedente riprende con il suo compito originale.
+
+Il servizio seleziona localmente fino a otto quesiti completi verificati (pacchetto massimo 16.000 caratteri), privilegiando il capitolo e i suoi discendenti nel grafo dei prerequisiti. Non invia l’intero archivio né usa il primo gruppo di quesiti come campione universale. Se necessario, il modello può recuperare altri quesiti con `read_exam_profile`; gli identificativi aggiunti vengono verificati sul database prima del salvataggio. Temi riservati, porzioni protette, soluzioni e quesiti fuori perimetro restano esclusi. La mancata presenza nel pacchetto non dimostra assenza negli esami.
+
+Le prove autonome “Esame” sono varianti dichiarate di quesiti autentici: conservano struttura, difficoltà, operazioni e formato, cambiando dati, scenario o codice. Devono usare soltanto nozioni già spiegate; le dipendenze fra sezioni possono indicare solo sezioni precedenti. I quiz guidati possono facilitare l’apprendimento senza sostituire la prova nel formato reale. Gli esercizi dei fondamenti possono essere più semplici e mirati.
+
+I controlli locali rifiutano riferimenti inventati, attività complementari, dipendenze successive e varianti autonome prive del quesito originale o con formato incompatibile. La revisione didattica controlla inoltre la necessità dei prerequisiti, la classificazione e l’equivalenza di difficoltà e struttura: questi sono giudizi AI provvisori. Il controllo delle fonti della revisione comprende anche le pagine d’esame delle etichette. Se non ci sono attività assegnate, la risoluzione indipendente registra un esito vuoto senza chiamare il modello; le revisioni disciplinare e didattica restano complete. Non viene introdotta una nuova chiamata di pianificazione: i metadati sono prodotti nell’indice già previsto e riutilizzati nei blocchi.
+
 ## Evidenze e fonti
 
 Ogni lettura iniziale o eseguita con strumenti registra testo effettivamente restituito, intervallo, impronta della fonte e metodo. Un risultato di ricerca non costituisce una lettura valida. Il modello può citare fonti consultate tramite strumenti, senza doverle sostituire con un riferimento arbitrario del blocco corrente.

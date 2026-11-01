@@ -21,7 +21,7 @@ test('budgets preserve response/tool space and cap default source input',()=>{
   assert.match(preparationInstructions('review_discipline'),/checked_blocks/);
 });
 
-async function selectivePipeline(hybrid=false,quota=false,resumeExpert=false,chunked=false){
+async function selectivePipeline(hybrid=false,quota=false,resumeExpert=false,chunked=false,examFocus=false){
   const root=await mkdtemp(path.join(os.tmpdir(),'studio-selective-')),project=path.resolve(import.meta.dirname,'../..');
   execFileSync(python,['-c',`import sys,pymupdf
 from pathlib import Path
@@ -49,15 +49,19 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     if(task.kind==='map_review')output={summary:'Mappa completa',checked_objectives:[0],issues:[]};
     if(task.kind==='chapter'){assert.deepEqual(task.plan.data.chapters.find((c:any)=>c.$ref),{$ref:'#/chapter'});}
     if(task.kind==='chapter')output={blocks:[{id:'intro',kind:'text',text:'Un algoritmo è una sequenza di istruzioni. PRAM è un modello astratto.',sources:[source]},{id:'worked',kind:'text',text:'Esempio svolto: con due valori serve un livello di riduzione.',sources:[source]},{id:'exercise',kind:'activity',depends_on:['intro'],spec:{kind:'numeric',title:'Variante autonoma',prompt:'Otto valori: quanti livelli?',origin:'generated',assumptions:'Albero binario bilanciato',solution:'Tre livelli',answer:3,rubric:'Numero di livelli',sources:[source],verification:{model:'reduction_depth',input:{n:8},expected:3}}}]};
+    if(examFocus&&task.kind==='chapter'){
+      output.blocks[2].spec={kind:'open',title:'Variante di classificazione',prompt:'Classifica una PRAM con letture condivise e scritture distinte e motiva.',origin:'adapted',assumptions:'Letture simultanee; scritture su celle distinte.',solution:'CREW: letture concorrenti, scritture esclusive.',rubric:'Classificazione motivata',sources:[source],exam_variant:{question:task.exam_policy.questions[0].id,adaptation:'Nuovo scenario, stessa classificazione motivata.'}};
+    }
     if(chunked&&task.kind==='chapter'){
       if(text.includes('Prima restituisci SOLO JSON {outline'))output={outline:[{id:'intro',kind:'text',title:'Foundations',goal:'Explain the model',role:'explain',covers:(task.chapter.exam_skills??[]).map((_:any,i:number)=>i)},{id:'worked',kind:'text',title:'Worked example',goal:'Show reasoning',role:'worked',covers:[]},{id:'exercise',kind:'activity',title:'Transfer',goal:'Apply independently',role:'independent',covers:[]}]};
       else {const pending=JSON.parse(text.match(/Genera SOLO i blocchi richiesti, nello stesso ordine: (.*?)\. Restituisci/)![1]);output={blocks:output.blocks.filter((b:any)=>pending.some((p:any)=>p.id===b.id))};}
+      if(examFocus&&output.outline)output.outline=output.outline.map((row:any,index:number)=>({...row,depends_on:index?['intro']:[],focus:{role:'exam',exam_refs:[task.exam_policy.questions[0].id],reason:'Classificazione esplicitamente richiesta nel tema.'}}));
     }
     if(task.kind==='review_solve'){
       assert.equal(task.draft.blocks.at(-1).spec.answer,undefined);assert.equal(task.draft.blocks.at(-1).spec.solution,undefined);
       output={solutions:[{block:'exercise',answer:3,reasoning:'Otto valori dimezzati tre volte',sources:[source]}]};
     }
-    if(['review_discipline','review_didactic'].includes(task.kind))output={summary:'Revisione completa con fonti originali',checked_blocks:task.draft.blocks.map((b:any)=>b.id),checked_sources:[source],issues:[]};
+    if(['review_discipline','review_didactic'].includes(task.kind))output={summary:'Revisione completa con fonti originali',checked_blocks:task.draft.blocks.map((b:any)=>b.id),checked_sources:[...new Set([source,...task.draft.blocks.flatMap((b:any)=>(b.focus?.references??[]).flatMap((r:any)=>r.sources))])],issues:[]};
     res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({id:'selective',object:'chat.completion.chunk',created:1,model:'test',choices:[{index:0,delta:{content:JSON.stringify(output)},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');
   });
   await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));let engine:CourseEngine|undefined;
@@ -70,6 +74,7 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     const tutor=new Tutor(bridge,path.join(root,'.state/studio'));tutor.runtime=runtime;
     await bridge.call('setting',{name:'model',value:{provider:'selective-test',id:'test'}});
     if(hybrid)await bridge.call('setting',{name:'preparation_routing',value:{enabled:true,provider:'selective-test',worker:'reader',expert:'test'}});
+    await bridge.call('setting',{name:'exam_focus_enabled',value:examFocus});
     engine=new CourseEngine(bridge,tutor);const p=await bridge.call('course_create',{course,request:'Primo parziale: PRAM',reserved:[held]});
     await engine.start(p.id);await idle(engine,p.id);assert.equal((await bridge.call('course_path_view',{path:p.id})).status,'confirm');
     await bridge.call('course_confirm',{path:p.id});await engine.start(p.id);await idle(engine,p.id);
@@ -83,6 +88,7 @@ for name,text in [('lecture.pdf','An algorithm has ordered instructions. PRAM us
     }
     const ready=await bridge.call('course_path_view',{path:p.id});assert.equal(ready.status,'ready',ready.error);
     assert.equal(ready.profile.total,1);assert.equal(ready.chapters[0].review.status,'reviewed');assert.equal(ready.current.content.blocks.length,3);
+    if(examFocus){assert.equal(ready.current.content.exam_focus_version,1);assert.ok(ready.current.content.blocks.every((b:any)=>b.focus?.role==='exam'));assert.ok(ready.current.content.blocks[2].focus.references[0].sources.length);}
     const reconciliationPayload=payloads.find(p=>JSON.stringify(p.messages).includes('reconciliation_version'));assert.ok(reconciliationPayload);assert.ok(!reconciliationPayload.tools?.length);assert.doesNotMatch(JSON.stringify(reconciliationPayload),/create_activity|read_material/);
     assert.ok(phases.includes('map_outline'));assert.ok(phases.includes('map_contribution'));assert.equal(phases.filter(p=>p==='map').length,1);
     const contribution=payloads.find(p=>JSON.stringify(p.messages).includes('evidence_ids'));assert.ok(!contribution.tools?.length);assert.doesNotMatch(JSON.stringify(contribution),/read_ranges|access_fingerprints/);
@@ -117,3 +123,6 @@ test('shared subscription quota stops hybrid preparation without trying to bypas
 test('expert interruption resumes the saved worker selection without paying for Luna twice',{skip:!existsSync(python)},()=>selectivePipeline(true,false,true));
 
 test('actual Pi chapter creation checkpoints an outline and batches before the independent reviews',{skip:!existsSync(python)},()=>selectivePipeline(false,false,false,true));
+
+
+test('actual Pi publishes exam-focused variants with verified labels and full source reviews',{skip:!existsSync(python)},()=>selectivePipeline(false,false,false,true,true));

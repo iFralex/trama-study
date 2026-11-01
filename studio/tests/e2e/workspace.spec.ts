@@ -1,10 +1,13 @@
 import {test,expect,type Page} from '@playwright/test';
 
-async function fixture(page:Page,options:{openAnswer?:boolean,missingAssessment?:boolean}={}){
+async function fixture(page:Page,options:{openAnswer?:boolean,missingAssessment?:boolean,relevance?:boolean}={}){
   const formula=String.raw`F=(a_0\land b_0)\lor(a_1\land b_1)\lor(a_2\land b_2)\lor(a_3\land b_3).`;
   const activity={id:'boolean-activity',version:1,state:{},created:'2026-01-01',spec:{kind:'completion',title:"Completa l'aggregazione booleana",prompt:'Calcola\n\n$$'+formula+'$$\n\nLe coppie di input occupano otto celle distinte.',curriculum:{chapter:'boolean'},origin:'generated',sources:['passage-1']}};
   const session:any={session:{id:'workspace-session',mode:'learn',minutes:25,goal:'Test',course:'workspace-course',current:activity.id},curriculum:{path:'workspace-path'},activities:[activity],messages:[],attempts:[],progress:[]};
   const path:any={id:'workspace-path',sid:session.session.id,status:'ready',objective:{request:'Primo parziale',summary:'Primo parziale',included:['PRAM'],engine:2},coverage:[],plan:{version:1,data:{final:true}},chapters:[{id:'boolean',title:'PRAM e aggregazione',objective:'Comprendere gli accessi concorrenti.',ready:true,version:1},{id:'reduction',title:'Riduzione parallela',ready:true,version:1}],position:{chapter:'boolean',block:'intro'},current:{chapter:'boolean',version:1,content:{review:true,blocks:[{id:'intro',kind:'text',text:'Un algoritmo combina passi elementari. Seleziona questa frase per discuterne.\n\nIl costo è $T(n)=an+b$.\n\n'+('Un esempio concreto da leggere.\n\n'.repeat(12)),sources:['passage-1']},{id:'exercise',kind:'activity',activity:activity.id,activity_version:1},{id:'conclusion',kind:'text',text:'Ora confronta i due procedimenti.',sources:[]}]}},profile:{total:0,formats:{},questions:[]},recalls:[],journal:[],revisions:[],reservations:[]};
+  if(options.relevance){
+    path.current.content.blocks.forEach((block:any,index:number)=>{block.focus={role:['exam','foundation','support'][index],reason:'Serve a riconoscere gli accessi richiesti nel tema.',references:index<2?[{question:'q1',label:'Tema di esempio · p. 2',sources:['passage-1']}]:[]};});
+  }
   const state={path,session,reads:0,assessmentRequests:0,chats:[] as string[],searches:[] as string[]};
   await page.addInitScript(()=>{localStorage.setItem('studio-last-view','corso');localStorage.setItem('studio-math-reading','text');});
   await page.route('**/*',async route=>{
@@ -238,4 +241,22 @@ test('one assessment is generated automatically and an interrupted optional expl
   expect(assessments).toBe(1);expect(requests).toBe(2);
   await page.reload();
   await expect(page.locator('[data-activity-id="boolean-activity"]').getByRole('button',{name:'Spiega la valutazione',exact:true})).toBeVisible();
+});
+
+
+test('section relevance labels explain their evidence and open the original source',async({page})=>{
+  await fixture(page,{relevance:true});
+  await page.getByRole('button',{name:'Continua a studiare'}).click();
+  const label=page.getByLabel('Rilevanza: Esame',{exact:true});
+  await expect(label).toBeVisible();
+  await label.click();
+  await expect(page.locator('.study-relevance').first()).toContainText('Serve a riconoscere gli accessi richiesti nel tema.');
+  await expect(page.getByLabel('Rilevanza: Complementare',{exact:true})).toHaveCount(1);
+  await page.getByRole('button',{name:'Tema di esempio · p. 2 ↗'}).first().click();
+  await expect(page.getByLabel('Fonte originale')).toBeVisible();
+  await page.getByRole('button',{name:'Chiudi fonte'}).click();
+  await page.getByRole('button',{name:'Torna al capitolo',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await expect(label).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

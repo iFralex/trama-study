@@ -110,9 +110,10 @@ class _StudyBase(BeginnerStudy, CourseStudy):
         return self.root / 'corsi' / course
 
     def setting(self, name, value=None):
-        if name not in ('model', 'last_course', 'installation_id', 'preparation_routing'):
+        if name not in ('model', 'last_course', 'installation_id', 'preparation_routing', 'exam_focus_enabled'):
             raise ValueError('Impostazione non valida.')
         if value is not None:
+            if name=='exam_focus_enabled' and not isinstance(value,bool):raise ValueError('Impostazione non valida.')
             self.db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)', (name, encoded(value)))
             self.db.commit()
         row = self.db.execute('SELECT value FROM settings WHERE key=?', (name,)).fetchone()

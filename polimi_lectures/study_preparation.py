@@ -352,7 +352,22 @@ class PreparationStudy(ChapterPreparation,MapStudy):
         for ref in sorted(refs):
             row=self.db.execute('SELECT d.id,d.fingerprint FROM passages p JOIN documents d ON d.id=p.document WHERE p.id=?',(ref,)).fetchone()
             if row:revisions[row['id']]=row['fingerprint']
-        data=dict(data,source_revisions=revisions);key=digest([VERSION,p['objective'],data])
+        data=dict(data,source_revisions=revisions)
+        if data.get('kind')=='repair_chapter' and data.get('draft',{}).get('exam_focus_version')==1:
+            data=dict(data,exam_policy=self._exam_focus_review_policy(path,data['draft']))
+        if data.get('kind') == 'chapter' and self.setting('exam_focus_enabled') is not False:
+            # Preserve the exact identity of an existing legacy writing checkpoint.
+            legacy=digest([VERSION,p['objective'],data])
+            row=self.db.execute("SELECT input,metrics,state FROM prep_tasks WHERE id=?",(legacy,)).fetchone()
+            if row and row['state'] not in ('done','stale') and unpack(row['metrics'],{}).get('chapter_checkpoint',{}).get('outline'):
+                return unpack(row['input'])
+            data=dict(data,exam_policy=self._exam_focus_policy(path,data['chapter'],data['plan']))
+            data.pop('profile',None)
+        gather(data)
+        for ref in sorted(refs):
+            row=self.db.execute('SELECT d.id,d.fingerprint FROM passages p JOIN documents d ON d.id=p.document WHERE p.id=?',(ref,)).fetchone()
+            if row:revisions[row['id']]=row['fingerprint']
+        key=digest([VERSION,p['objective'],data])
         task=dict(data,task_id=key,engine=2,objective=p['objective'])
         if not getattr(self,'_peek_preparation',False):
             with self.db:self.db.execute('INSERT OR IGNORE INTO prep_tasks(id,path,kind,input,state) VALUES(?,?,?,?,?)',(key,path,data['kind'],pack(task),'pending'))
@@ -451,18 +466,22 @@ class PreparationStudy(ChapterPreparation,MapStudy):
             if not draft or draft['published']:
                 return self._prep_task(path,dict(common,kind='chapter',chapter=chapter,plan=plan,evidence_context=self._map_context(path,claims,chapter),profile=self.course_exam_profile(path),sources=[self.source(ref,allow_solutions=False) for ref in chapter['sources'][:8]],preferences=self.course_journal(p['course'],kind='preference',limit=12)))
             content=unpack(draft['data']);reviews={key:unpack(draft[key]) for key in ('solve','discipline','didactic')}
+            exam_policy=self._exam_focus_review_policy(path,content)
             refs=list(dict.fromkeys(ref for b in content['blocks'] for ref in b.get('sources',b.get('spec',{}).get('sources',[]))))
+            refs+=sorted(self._review_required_sources(content)-set(refs))
             originals=[];used=len(pack(content))//3
             for ref in refs:
                 source=self.source(ref,allow_solutions=False)
                 if used+len(source['text'])//3>budget:break
                 originals.append({k:source[k] for k in ('id','document','text','page','start','end','quality','kind')});used+=len(source['text'])//3
             taskbase=dict(common,chapter=chapter,draft_revision=draft['revision'],draft=content,originals=originals,profile=self.course_exam_profile(path),reviews=reviews)
+            if exam_policy:
+                taskbase['exam_policy']=exam_policy;taskbase.pop('profile',None)
             if not draft['solve']:
                 blind=copy.deepcopy(content)
                 for block in blind['blocks']:
                     if block['kind']=='activity':
-                        allowed={'kind','title','prompt','options','sources','origin','assumptions','model','html','fallback'}
+                        allowed={'kind','title','prompt','options','sources','origin','assumptions','model','html','fallback','exam_variant'}
                         block['spec']={k:v for k,v in block['spec'].items() if k in allowed}
                 taskbase['draft']=blind;taskbase.pop('reviews');return self._prep_task(path,dict(taskbase,kind='review_solve'))
             if not draft['discipline']:return self._prep_task(path,dict(taskbase,kind='review_discipline'))
@@ -540,6 +559,7 @@ class PreparationStudy(ChapterPreparation,MapStudy):
         for block in draft['blocks']:
             owner=block if block['kind']=='text' else block.get('spec',{})
             refs.update(owner.get('sources',[]));refs.update(owner.get('external_sources',[]))
+            for ref in block.get('focus',{}).get('references',[]):refs.update(ref['sources'])
         return refs
 
     def _review_refs(self,path,task,refs):
@@ -705,6 +725,10 @@ class PreparationStudy(ChapterPreparation,MapStudy):
                     self.db.execute('INSERT INTO course_plans VALUES(?,?,?,?,?)',(path,task['plan']['version']+1,pack(data),'Mappa da correggere dopo revisione',stamp()))
         elif kind in ('chapter','repair_chapter'):
             chapter=task['chapter']['id']
+            if kind=='chapter' and task.get('exam_policy',{}).get('version')==1:
+                saved=unpack(record['metrics'],{}).get('chapter_checkpoint',{})
+                if not saved.get('outline'):raise ValueError('Priorità esame: manca l’indice verificato del capitolo.')
+                result=dict(result,blocks=self._exam_focus_blocks(task,saved['outline'],result.get('blocks',[])),exam_focus_version=1)
             result=dict(result,blocks=self._chapter_blocks_normalized(task,result.get('blocks',[]))) if kind=='chapter' else result
             for block in result.get('blocks',[]):
                 if kind=='repair_chapter':self._repair_block_validate(path,task,block)
@@ -988,8 +1012,8 @@ class PreparationStudy(ChapterPreparation,MapStudy):
         # Never infer exam frequency from a classroom question, even in archived legacy runs.
         data=super().course_exam_profile(path,0,100000)
         rows=[]
-        for r in self.db.execute('SELECT q.data,d.path document_path FROM course_questions q JOIN documents d ON d.id=q.document WHERE q.path=?',(path,)):
-            q=unpack(r['data'])
+        for r in self.db.execute('SELECT q.id,q.data,d.path document_path FROM course_questions q JOIN documents d ON d.id=q.document WHERE q.path=?',(path,)):
+            q=dict(unpack(r['data']),id=r['id'])
             if not is_exam(r['document_path']) or q.get('origin','exam')!='exam':continue
             if self._v2(path) and not q.get('authenticity_verified'):continue
             try:

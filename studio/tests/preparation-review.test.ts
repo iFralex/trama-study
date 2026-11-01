@@ -7,6 +7,15 @@ import type {Tutor} from '../server/tutor';
 
 const task={kind:'review_discipline',chapter:{id:'chapter'},draft_revision:2,originals:[{id:'supplied',text:'Original text'}],draft:{blocks:[{id:'intro',kind:'text',text:'Already reviewed text.',sources:['supplied']},{id:'exercise',kind:'activity',spec:{sources:['tool-read'],prompt:'Exercise'}},{id:'extra',kind:'text',text:'A claim with an additional citation.',sources:['supplied']}]}};
 
+test('relevance labels require checking their exam sources and target the affected sections on repair',()=>{
+ const focused=structuredClone(task);
+ Object.assign(focused.draft.blocks[0],{focus:{references:[{question:'q1',sources:['exam-page']}]}});
+ assert.ok(reviewChecklist(focused)!.required_sources.includes('exam-page'));
+ const packet=JSON.parse(reviewRepairPrompt(focused,{checked_sources:['supplied','tool-read'],issues:[]},'Missing exam evidence',['supplied','tool-read']).split('Dati della riparazione:\n')[1]);
+ assert.equal(packet.blocks_to_recheck[0].id,'intro');
+ assert.deepEqual(packet.attention_sources,['exam-page']);
+});
+
 test('review checklist and targeted repair include external references without treating them as supplied originals',()=>{
   const external='https://example.edu/reference',extended=structuredClone(task);
   Object.assign(extended.draft.blocks[0],{external_sources:[external]});
@@ -37,16 +46,18 @@ test('repair of an incomplete bibliography retains sources from the original inp
   assert.deepEqual(data.checklist.sources_in_input,['supplied']);
 });
 
-async function resumeReview(valid=false,reject=false,kind='review_discipline'){
+async function resumeReview(valid=false,reject=false,kind='review_discipline',textOnly=false){
   const previous={summary:'Prior review',checked_blocks:['intro','exercise','extra'],checked_sources:['supplied','tool-read','unread'],issues:[{block:'extra',severity:'warning',message:'Verify the additional reference.',sources:['unread']}]};
+  const input=textOnly?{...task,draft:{blocks:task.draft.blocks.filter(b=>b.kind==='text')}}:task;
+  let committed:any;
   let complete=false,asks=0;const prompts:string[]=[],states:string[]=[];
   const bridge={async call(method:string,args:any={}){
     if(method==='course_path_view')return {sid:'session',status:'error'};
     if(method==='course_status'){states.push(args.status);return {};}
-    if(method==='course_peek_task')return complete?{kind:'done'}:{...task,kind};
-    if(method==='course_task')return {...task,kind,task_id:'task'};
+    if(method==='course_peek_task')return complete?{kind:'done'}:{...input,kind};
+    if(method==='course_task')return {...input,kind,task_id:'task'};
     if(method==='preparation_begin')return {metrics:{},review_recovery:{result:previous,error:valid?'':'Citazione non letta: unread',read_sources:['supplied','tool-read']}};
-    if(method==='preparation_commit'){if(reject)throw Error('La revisione deve verificare le fonti dei blocchi.');complete=true;return {};}
+    if(method==='preparation_commit'){committed=args.result;if(reject)throw Error('La revisione deve verificare le fonti dei blocchi.');complete=true;return {};}
     if(['preparation_metric','preparation_model_call','preparation_usage','preparation_reject'].includes(method))return {};
     throw Error(method);
   }} as unknown as Bridge;
@@ -54,7 +65,7 @@ async function resumeReview(valid=false,reject=false,kind='review_discipline'){
   const tutor={busySessions:new Set(),preparationOwner:undefined,async preparationRouting(){return null;},async preparationBudget(){return {input:32000,context:64000,output:8192,key:'test:model',model:{provider:'test',id:'model'}};},async create(){return {subscribe(callback:any){emit=callback;return()=>{};},async prompt(text:string){asks++;prompts.push(text);emit({type:'message_update',assistantMessageEvent:{type:'text_delta',delta:JSON.stringify(previous)}});},dispose(){}};}} as unknown as Tutor;
   const work=runPreparation(bridge,tutor,'path',{paused:false});
   if(reject)await assert.rejects(work,/fonti dei blocchi/);else await work;
-  return {asks,prompts,states,tutor};
+  return {asks,prompts,states,tutor,committed};
 }
 
 test('resuming a rejected review asks only for targeted repair and does not repeat the full review',async()=>{
@@ -73,4 +84,11 @@ test('recovered independent solutions also commit without another model request'
 
 test('a failed resumed repair stops after one request without bypassing validation',async()=>{
   const result=await resumeReview(false,true);assert.equal(result.asks,1);assert.equal(result.tutor.preparationOwner,undefined);
+});
+
+
+test('chapters without activities skip the solver model while preserving the normal checkpoint',async()=>{
+  const result=await resumeReview(false,false,'review_solve',true);
+  assert.equal(result.asks,0);assert.deepEqual(result.committed,{solutions:[]});
+  assert.deepEqual(result.states,['running','ready']);
 });
