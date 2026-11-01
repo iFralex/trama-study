@@ -12,7 +12,7 @@ import {normalizeMath,inlineComparisonTex} from './math';
 import {CourseStudio} from './course-studio';
 import {MaterialsLibrary} from './materials-library';
 import {AttemptFeedback,friendlyReviewError,type ReviewProgress} from './attempt-feedback';
-import {preserveParagraphIndentation} from './markdown';
+import {preserveParagraphIndentation,studyDetails} from './markdown';
 import {AccessibleMath,formulaTex,MathReadingProvider,MathReadingSettings} from './math-accessibility';
 
 type Activity={id:string,version:number,spec:any,state:Record<string,any>,created?:string};
@@ -29,7 +29,7 @@ const proseComponents:Components={
   span:({node,className,children,...props})=>className?.split(' ').includes('katex')?<AccessibleMath tex={formulaTex(node)}><span className={className} {...props}>{children}</span></AccessibleMath>:<span className={className} {...props}>{children}</span>,
   a:function ProseLink({href,children}){const open=useContext(Sources);return href?.startsWith('source:')?<button className="source-link" onClick={()=>open(href.slice(7))}>{children}</button>:<a href={href} target="_blank" rel="noreferrer">{children}</a>;},
 };
-function Prose({text}:{text:string}){return <Markdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[preserveParagraphIndentation,rehypeKatex]} urlTransform={url=>/^(source:|https?:|#)/.test(url)?url:''} components={proseComponents}>{normalizeMath(text)}</Markdown>;}
+function Prose({text}:{text:string}){return <Markdown remarkPlugins={[remarkGfm,remarkMath,studyDetails]} rehypePlugins={[preserveParagraphIndentation,rehypeKatex]} urlTransform={url=>/^(source:|https?:|#)/.test(url)?url:''} components={proseComponents}>{normalizeMath(text)}</Markdown>;}
 const ActivityRendering=createContext<(id:string,version:number)=>React.ReactNode>(()=>null);
 function StudyTool({args}:any){const render=useContext(ActivityRendering);return render(args.id,args.version);}
 const Text=({text}:TextMessagePartProps)=><Prose text={text}/>;

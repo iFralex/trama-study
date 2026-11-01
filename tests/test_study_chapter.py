@@ -87,3 +87,25 @@ class ChapterCheckpointTest(unittest.TestCase):
         self.store.preparation_commit(self.path,task,{'blocks':saved['blocks']})
         self.assertIsNone(self.store._chapter(self.path,task['chapter']['id']),'Full chapter remains a draft until independent reviews')
         self.assertEqual(self.task()['kind'],'review_solve')
+
+    def test_completed_batch_with_verified_web_objects_is_recovered_after_save_failure(self):
+        task,blocks,outline=self.setup_task();url='https://example.org/primary'
+        self.store.preparation_read(task['task_id'],{'url':url,'text':'Primary source read'},'read_web_page')
+        self.store.preparation_chapter_checkpoint(self.path,task['task_id'],{'version':1,'outline':outline,'blocks':blocks[:1]})
+        blocks[1]['external_sources']=[{'url':url,'title':'Primary source'},url]
+        self.store.preparation_model_call(self.path,task['task_id'],'completed',{'provider':'test','id':'model'},'author',{'protocol':'chapter-batches-1','output':json.dumps({'blocks':blocks[1:2]})})
+        recovered=self.store._chapter_recovery(self.path,task)
+        self.assertEqual(recovered['error'],'');self.assertEqual(len(recovered['blocks']),2)
+        self.assertEqual(recovered['blocks'][0],blocks[0])
+        self.assertEqual(recovered['blocks'][1]['external_sources'],[url])
+        saved=self.store.preparation_chapter_checkpoint(self.path,task['task_id'],recovered)
+        self.assertEqual(saved['blocks'],recovered['blocks'])
+        self.assertIsNone(self.store._chapter(self.path,task['chapter']['id']))
+
+    def test_web_objects_cannot_bypass_read_receipts_or_url_validation(self):
+        task,blocks,outline=self.setup_task()
+        for external in ([{'url':'https://example.org/unread'}],[{'title':'Missing URL'}],[42],'https://example.org/not-a-list'):
+            with self.subTest(external=external):
+                blocks[0]['external_sources']=external
+                with self.assertRaisesRegex(ValueError,'Fonte web'):
+                    self.store.preparation_chapter_checkpoint(self.path,task['task_id'],{'version':1,'outline':outline,'blocks':blocks[:1]})

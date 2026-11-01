@@ -85,7 +85,13 @@ class ChapterPreparation:
             owner = block.get('spec', {}) if block.get('kind') == 'activity' else block
             refs = owner.get('sources', [])
             urls = [r for r in refs if isinstance(r, str) and r.startswith('https://')]
-            external = list(dict.fromkeys(owner.get('external_sources', []) + urls))
+            external = owner.get('external_sources', [])
+            if not isinstance(external, list):
+                raise ValueError('Fonte web del capitolo non valida: external_sources deve essere un elenco di URL HTTPS.')
+            external = [ref.get('url') if isinstance(ref, dict) else ref for ref in external]
+            if any(not isinstance(url, str) or not url.startswith('https://') for url in external):
+                raise ValueError('Fonte web del capitolo non valida: specifica un URL HTTPS per ogni riferimento.')
+            external = list(dict.fromkeys(external + urls))
             if any(not self.db.execute('SELECT 1 FROM prep_external WHERE task=? AND url=?', (task['task_id'], url)).fetchone() for url in external):
                 raise ValueError('Fonte web del capitolo non letta nel compito: usa read_web_page prima di citarla.')
             if urls:
@@ -127,7 +133,7 @@ class ChapterPreparation:
         for row in self.db.execute('SELECT data FROM prep_model_calls WHERE task=? AND path=? ORDER BY rowid DESC LIMIT 4', (task['task_id'], path)):
             call = json.loads(row['data']);candidate = recover_chapter_blocks(call.get('output', ''))
             if call.get('protocol') == 'chapter-batches-1':
-                if call.get('error') and outline and candidate and [b.get('id') for b in candidate] == [b['id'] for b in outline[len(blocks):len(blocks) + len(candidate)]]:
+                if outline and candidate and [b.get('id') for b in candidate] == [b['id'] for b in outline[len(blocks):len(blocks) + len(candidate)]]:
                     try:blocks = self._chapter_prefix_validate(path, task, blocks + candidate)
                     except (ValueError, KeyError, TypeError):pass
             elif len(candidate) > len(blocks) and (not blocks or candidate[:len(blocks)] == blocks):
