@@ -21,12 +21,15 @@ export function chapterRepairSourceIds(task:any,id:string):string[]{
   return [...new Set<string>([...(block.sources??block.spec?.sources??[]),...(block.focus?.references??[]).flatMap((ref:any)=>ref.sources),...Object.values(task.reviews??{}).flatMap((review:any)=>(review.issues??[]).filter((issue:any)=>issue.block===id).flatMap((issue:any)=>issue.sources??[]))])].filter(ref=>!/^https?:/.test(ref));
 }
 
+const nonemptyText=(value:unknown):value is string=>typeof value==='string'&&!!value.trim();
+const completeRubric=(value:unknown):boolean=>nonemptyText(value)||(Array.isArray(value)&&value.length>0&&value.every(item=>nonemptyText(item)||(item&&nonemptyText(item.criterion)&&nonemptyText(item.description))));
+
 function replacement(task:any,id:string,result:any){
   const original=task.draft.blocks.find((b:any)=>b.id===id),blocks=result?.blocks;
   if(!Array.isArray(blocks)||blocks.length!==1||blocks[0]?.id!==id||blocks[0]?.kind!==original.kind)throw Error('La correzione deve restituire soltanto il blocco richiesto, con lo stesso id e kind.');
   const block={...blocks[0],...(original.focus?{focus:original.focus,learning_role:original.learning_role,depends_on:original.depends_on}:{})};
-  if(block.kind==='text'&&(!block.text?.trim()||!Array.isArray(block.sources)))throw Error('Blocco corretto senza testo o fonti.');
-  if(block.kind==='activity'&&(!block.spec?.prompt?.trim()||!block.spec?.solution?.trim()||!block.spec?.rubric?.trim()||!Array.isArray(block.spec?.sources)))throw Error('Attività corretta incompleta: servono prompt, soluzione, rubrica e fonti.');
+  if(block.kind==='text'&&(!nonemptyText(block.text)||!Array.isArray(block.sources)))throw Error('Blocco corretto senza testo o fonti.');
+  if(block.kind==='activity'&&(!nonemptyText(block.spec?.prompt)||!nonemptyText(block.spec?.solution)||!completeRubric(block.spec?.rubric)||!Array.isArray(block.spec?.sources)))throw Error('Attività corretta incompleta: servono prompt, soluzione, rubrica e fonti.');
   return block;
 }
 

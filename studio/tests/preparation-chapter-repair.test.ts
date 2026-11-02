@@ -41,6 +41,22 @@ test('pause preserves checkpoints and never returns a partial chapter to commit'
  const result=await repairChapterBlocks(task,null,async p=>answer(p),async checkpoint=>{saved=checkpoint;paused=true;},()=>paused);
  assert.equal(result,null);assert.equal(saved.blocks.length,1);
 });
+test('repair preserves structured rubrics through checkpoints and rejects malformed fields with a bounded retry',async()=>{
+ const activity=structuredClone(task) as any;
+ const rubric=[{criterion:'Reasoning',weight:3,description:'Explain the assumptions'}];
+ activity.reviews={discipline:{issues:[{block:'second',sources:['b']}]}};
+ activity.draft.blocks[1]={id:'second',kind:'activity',spec:{prompt:'P',solution:'S',rubric,sources:['b']}};
+ let saved:any;
+ const result=await repairChapterBlocks(activity,null,async()=>({blocks:[activity.draft.blocks[1]]}),async checkpoint=>{saved=checkpoint;},()=>false);
+ assert.deepEqual(result.blocks[1].spec.rubric,rubric);
+ const resumed=await repairChapterBlocks(activity,saved,async()=>{throw Error('Completed block must not be regenerated');},async()=>{},()=>false);
+ assert.deepEqual(resumed,result);
+ for(const invalid of [{rubric:[]},{rubric:[{}]},{rubric:42},{prompt:{}},{solution:[]}]){
+  let calls=0;
+  await assert.rejects(repairChapterBlocks(activity,null,async()=>{calls++;return {blocks:[{...activity.draft.blocks[1],spec:{...activity.draft.blocks[1].spec,...invalid}}]};},async()=>{},()=>false),/corretta incompleta/);
+  assert.equal(calls,2);
+ }
+});
 test('engine saves block checkpoints and submits the complete chapter to normal validation',async()=>{
  let complete=false,committed:any;const saved:any[]=[],sessions:any[]=[];
  const bridge={async call(method:string,args:any={}){
